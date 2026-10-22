@@ -8,28 +8,24 @@ It requires **zero servers, zero databases, zero background daemons, and zero th
 
 ---
 
-## Agent Playbook: How to Set Up `stake` for Any Git Repository
+## Agent Playbook
 
-When configuring `stake` for a target repository `<TARGET_REPO>`:
+For comprehensive instructions on configuring and operating `stake` across AI coding agents (Claude Code, Cursor, Antigravity, OpenCode, Devin, etc.), see the dedicated operational playbook:
 
-### Step 1: Ensure `stake` is on `PATH`
-Clone `stake` to a directory of your choice (e.g. `stake` in your code workspace) and symlink the executable:
+📖 **[Stake Agent Playbook](docs/playbook.md)** (also packaged as an agent skill in [`skills/stake/SKILL.md`](skills/stake/SKILL.md))
+
+### Quick Setup
+
 ```bash
+# 1. Ensure stake is on PATH
 mkdir -p ~/.local/bin
 ln -sf /path/to/stake/bin/stake ~/.local/bin/stake
-chmod +x /path/to/stake/bin/stake
-```
+chmod +x ~/.local/bin/stake
 
-### Step 2: Initialize the target repository
-```bash
+# 2. Initialize target repository
 stake init --repo "<TARGET_REPO>"
-```
-What `stake init` does non-destructively:
-1. **Chains Git Hooks Safely:** Respects `core.hooksPath` (or `.git/hooks`) and injects an idempotent `# --- stake-hook-start ---` block into `pre-commit` and `pre-push`. Existing repository hooks (linters, formatters, Husky) are preserved intact.
-2. **Updates `AGENTS.md` (and `CLAUDE.md` if present):** Adds an idempotent `<!-- stake:start -->` section instructing every coding harness (Claude Code, OpenCode, Cursor, Antigravity) to run `stake claim` at the end of root-cause diagnosis/planning.
 
-### Step 3: Verify Setup
-```bash
+# 3. Verify status
 stake status --repo "<TARGET_REPO>"
 ```
 

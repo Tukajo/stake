@@ -5,6 +5,8 @@ description: Use when onboarding a repository to the Stake duplicate-work radar 
 
 # Stake: Serverless Git-Ref Duplicate-Work Radar
 
+See the full [Stake Agent Playbook](../../docs/playbook.md) for comprehensive operational guidelines.
+
 ## Onboarding a Target Repository
 
 When asked to set up or install `stake` for any Git repository `<REPO_PATH>`:
