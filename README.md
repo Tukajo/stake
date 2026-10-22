@@ -1,8 +1,8 @@
 # Stake
 
-**Serverless Git-Ref Duplicate-Work Radar for Multi-Agent Teams.**
+**Agentic Git Coordination Framework**
 
-`stake` prevents developers and coding agents from unknowingly spending time implementing the same underlying fix—including when starting from **two different tickets describing different symptoms** or working across different target branches (`development` vs. `release/stg`).
+Stake, an Agentic Coordination Framework for Git. It prevents developers and coding agents from unknowingly spending time implementing the same underlying fix—including when starting from **two different tickets describing different symptoms** or working across different target branches (`development` vs. `release/stg`).
 
 It requires **zero servers, zero databases, zero background daemons, and zero third-party dependencies**, storing tiny self-cleaning claims directly on your Git remote under `refs/stake/claims/*`.
 
