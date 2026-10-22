@@ -1,27 +1,28 @@
-# Stake (`~/Code/stake`)
+# Stake
 
 **Serverless Git-Ref Duplicate-Work Radar for Multi-Agent Teams.**
 
-`stake` prevents two developers (and their coding agents) from unknowingly spending a day implementing the same underlying fix—including when they start from **two different tickets describing different symptoms** or work across different target branches (`development` vs. `release/stg`).
+`stake` prevents developers and coding agents from unknowingly spending time implementing the same underlying fix—including when starting from **two different tickets describing different symptoms** or working across different target branches (`development` vs. `release/stg`).
 
-It requires **zero servers, zero databases, zero background daemons, and zero third-party packages**, storing tiny self-cleaning claims directly on your Git remote under `refs/stake/claims/*`.
+It requires **zero servers, zero databases, zero background daemons, and zero third-party dependencies**, storing tiny self-cleaning claims directly on your Git remote under `refs/stake/claims/*`.
 
 ---
 
 ## Agent Playbook: How to Set Up `stake` for Any Git Repository
 
-If a human asked you (an AI coding agent) to set up `stake` for a target repository `<TARGET_REPO>`, run these exact steps:
+When configuring `stake` for a target repository `<TARGET_REPO>`:
 
 ### Step 1: Ensure `stake` is on `PATH`
+Clone `stake` to a directory of your choice (e.g. `stake` in your code workspace) and symlink the executable:
 ```bash
 mkdir -p ~/.local/bin
-ln -sf /home/tjfrisch/Code/stake/bin/stake ~/.local/bin/stake
-chmod +x /home/tjfrisch/Code/stake/bin/stake
+ln -sf /path/to/stake/bin/stake ~/.local/bin/stake
+chmod +x /path/to/stake/bin/stake
 ```
 
 ### Step 2: Initialize the target repository
 ```bash
-/home/tjfrisch/Code/stake/bin/stake init --repo "<TARGET_REPO>"
+stake init --repo "<TARGET_REPO>"
 ```
 What `stake init` does non-destructively:
 1. **Chains Git Hooks Safely:** Respects `core.hooksPath` (or `.git/hooks`) and injects an idempotent `# --- stake-hook-start ---` block into `pre-commit` and `pre-push`. Existing repository hooks (linters, formatters, Husky) are preserved intact.
@@ -29,7 +30,7 @@ What `stake init` does non-destructively:
 
 ### Step 3: Verify Setup
 ```bash
-/home/tjfrisch/Code/stake/bin/stake status --repo "<TARGET_REPO>"
+stake status --repo "<TARGET_REPO>"
 ```
 
 ---

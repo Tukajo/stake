@@ -39,7 +39,7 @@ def _setup_two_devs(tmp_path: Path, stake_bin: Path) -> tuple[Path, Path, Path]:
 
 
 def test_e2e_plan_checkin_and_silent_commit(tmp_path: Path):
-    stake_bin = Path("/home/tjfrisch/Code/stake/bin/stake")
+    stake_bin = Path(__file__).resolve().parent.parent / "bin" / "stake"
     _, alice, bob = _setup_two_devs(tmp_path, stake_bin)
 
     subprocess.run(["git", "-C", str(alice), "checkout", "-b", "fix/PROJ-412-csv"], check=True, capture_output=True)
@@ -58,7 +58,7 @@ def test_e2e_plan_checkin_and_silent_commit(tmp_path: Path):
 
 
 def test_e2e_skipped_plan_stops_once_at_precommit_then_bypasses_on_retry(tmp_path: Path):
-    stake_bin = Path("/home/tjfrisch/Code/stake/bin/stake")
+    stake_bin = Path(__file__).resolve().parent.parent / "bin" / "stake"
     _, alice, bob = _setup_two_devs(tmp_path, stake_bin)
 
     # Alice declares on development
@@ -104,7 +104,7 @@ def test_e2e_cli_offline_remote_logs_warning_and_exits_zero(tmp_path: Path):
 def test_e2e_root_file_drift_and_metadata_preservation(tmp_path: Path):
     from stake.git_refs import read_local_claim_refs
 
-    stake_bin = Path("/home/tjfrisch/Code/stake/bin/stake")
+    stake_bin = Path(__file__).resolve().parent.parent / "bin" / "stake"
     _, alice, bob = _setup_two_devs(tmp_path, stake_bin)
 
     # Alice claims root-level Makefile

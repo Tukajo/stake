@@ -1,6 +1,6 @@
 ---
 name: stake
-description: Use when onboarding a repository to the Stake duplicate-work radar (~/Code/stake) or when declaring a root-cause diagnosis and proposed fix before writing code.
+description: Use when onboarding a repository to the Stake duplicate-work radar or when declaring a root-cause diagnosis and proposed fix before writing code.
 ---
 
 # Stake: Serverless Git-Ref Duplicate-Work Radar
@@ -9,18 +9,18 @@ description: Use when onboarding a repository to the Stake duplicate-work radar 
 
 When asked to set up or install `stake` for any Git repository `<REPO_PATH>`:
 
-1. Ensure the CLI symlink is installed:
+1. Ensure the `stake` executable is on `PATH` or symlinked to `~/.local/bin/stake`:
    ```bash
    mkdir -p ~/.local/bin
-   ln -sf /home/tjfrisch/Code/stake/bin/stake ~/.local/bin/stake
+   ln -sf /path/to/stake/bin/stake ~/.local/bin/stake
    ```
 2. Run the non-destructive initializer:
    ```bash
-   /home/tjfrisch/Code/stake/bin/stake init --repo "<REPO_PATH>"
+   stake init --repo "<REPO_PATH>"
    ```
-3. Commit the updated `AGENTS.md` (if the user wants it tracked in the target repo) and verify with:
+3. Commit the updated `AGENTS.md` (if tracked in the target repo) and verify with:
    ```bash
-   /home/tjfrisch/Code/stake/bin/stake status --repo "<REPO_PATH>"
+   stake status --repo "<REPO_PATH>"
    ```
 
 ## Using `stake` During Feature / Bugfix Work
