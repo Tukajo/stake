@@ -1,4 +1,40 @@
+# Superpowers & planning artifacts
 .superpowers/
+docs/superpowers/
+
+# Python bytecode & packaging
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Test & coverage caches
 .pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Type checkers & linters
+.mypy_cache/
+.ruff_cache/
+
+# IDEs & OS files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Local environment overrides
+.env
+.env.*
