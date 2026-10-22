@@ -68,14 +68,25 @@ def _detect_base_branch(repo_path: str, current_branch: str) -> str:
     if current_branch in _CANDIDATE_BASE_BRANCHES:
         return current_branch
 
+    # 1. Check git reflog for the branch we most recently branched/moved from
+    reflog = _run_git(repo_path, ["reflog", "-n", "25", "--format=%gs"], check=False)
+    if reflog.returncode == 0 and reflog.stdout:
+        target_suffix = f" to {current_branch}"
+        for line in reflog.stdout.splitlines():
+            if line.startswith("checkout: moving from ") and line.endswith(target_suffix):
+                source = line[len("checkout: moving from ") : -len(target_suffix)].strip()
+                if source in _CANDIDATE_BASE_BRANCHES:
+                    return source
+
+    # 2. Check merge-base distance, preferring local refs/heads/* over remote refs/remotes/origin/*
     best_branch: str | None = None
-    best_distance: int | None = None
+    best_key: tuple[int, int] | None = None  # (distance, 0 for local head / 1 for remote)
 
     for candidate in _CANDIDATE_BASE_BRANCHES:
-        for ref_prefix in ("refs/remotes/origin/", "refs/heads/"):
+        for priority, ref_prefix in ((0, "refs/heads/"), (1, "refs/remotes/origin/")):
             ref = f"{ref_prefix}{candidate}"
-            Verify = _run_git(repo_path, ["rev-parse", "--verify", "--quiet", ref], check=False)
-            if Verify.returncode != 0:
+            verify = _run_git(repo_path, ["rev-parse", "--verify", "--quiet", ref], check=False)
+            if verify.returncode != 0:
                 continue
             mb = _run_git(repo_path, ["merge-base", "HEAD", ref], check=False)
             if mb.returncode != 0 or not mb.stdout.strip():
@@ -83,9 +94,9 @@ def _detect_base_branch(repo_path: str, current_branch: str) -> str:
             base_sha = mb.stdout.strip()
             dist_res = _run_git(repo_path, ["rev-list", "--count", f"{base_sha}..HEAD"], check=False)
             if dist_res.returncode == 0 and dist_res.stdout.strip().isdigit():
-                dist = int(dist_res.stdout.strip())
-                if best_distance is None or dist < best_distance:
-                    best_distance = dist
+                key = (int(dist_res.stdout.strip()), priority)
+                if best_key is None or key < best_key:
+                    best_key = key
                     best_branch = candidate
     return best_branch or current_branch or "main"
 
@@ -207,7 +218,7 @@ def sync_claims_with_remote(
             try:
                 _run_git(
                     repo_path,
-                    ["push", "origin", "--delete", f"{REF_PREFIX}{exp_id}"],
+                    ["push", "--no-verify", "origin", "--delete", f"{REF_PREFIX}{exp_id}"],
                     timeout=timeout,
                     check=False,
                 )
@@ -219,7 +230,7 @@ def sync_claims_with_remote(
             try:
                 push_res = _run_git(
                     repo_path,
-                    ["push", "--force", "origin", f"{ref}:{ref}"],
+                    ["push", "--no-verify", "--force", "origin", f"{ref}:{ref}"],
                     timeout=timeout,
                     check=False,
                 )
