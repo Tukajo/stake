@@ -101,5 +101,54 @@ def test_e2e_cli_offline_remote_logs_warning_and_exits_zero(tmp_path: Path):
     assert "stake: remote unreachable, continuing offline" in commit_res.stderr
 
 
+def test_e2e_root_file_drift_and_metadata_preservation(tmp_path: Path):
+    from stake.git_refs import read_local_claim_refs
+
+    stake_bin = Path("/home/tjfrisch/Code/stake/bin/stake")
+    _, alice, bob = _setup_two_devs(tmp_path, stake_bin)
+
+    # Alice claims root-level Makefile
+    subprocess.run(["git", "-C", str(alice), "checkout", "-b", "fix/root-makefile"], check=True, capture_output=True)
+    assert main([
+        "claim", "--repo", str(alice),
+        "--symptom", "Build target broken",
+        "--fix", "Update Makefile build rule",
+        "--files", "Makefile",
+        "--ticket", "CUSTOM-77",
+        "--base", "release/stg",
+    ]) == 0
+
+    # Alice commits Makefile -> verify custom ticket & base_branch preserved on transition to committed
+    (alice / "Makefile").write_text("all:\n\techo ok\n")
+    subprocess.run(["git", "-C", str(alice), "add", "Makefile"], check=True, capture_output=True)
+    res_a = subprocess.run(["git", "-C", str(alice), "commit", "-m", "fix: makefile"], capture_output=True, text=True)
+    assert res_a.returncode == 0
+    alice_claims = [c for c in read_local_claim_refs(str(alice)) if c.owner_email == "alice@example.com"]
+    assert len(alice_claims) == 1
+    assert alice_claims[0].ticket == "CUSTOM-77"
+    assert alice_claims[0].base_branch == "release/stg"
+    assert alice_claims[0].stage == "committed"
+
+    # Bob claims an unrelated file in src/permissions/resolver.ts (so Alice's Makefile claim is fetched & marked seen)
+    subprocess.run(["git", "-C", str(bob), "checkout", "-b", "fix/bob-task"], check=True, capture_output=True)
+    assert main([
+        "claim", "--repo", str(bob),
+        "--symptom", "Resolver tweak",
+        "--fix", "Adjust resolver return",
+        "--files", "src/permissions/resolver.ts",
+    ]) == 0
+
+    # Bob then drifts and stages root-level Makefile at commit time -> must un-suppress Alice's Makefile claim once!
+    (bob / "Makefile").write_text("all:\n\techo bob\n")
+    subprocess.run(["git", "-C", str(bob), "add", "Makefile"], check=True, capture_output=True)
+    c1 = subprocess.run(["git", "-C", str(bob), "commit", "-m", "fix: also touch makefile"], capture_output=True, text=True)
+    assert c1.returncode != 0
+    assert "Makefile" in c1.stderr
+
+    # Second commit attempt succeeds (show-once semantics)
+    c2 = subprocess.run(["git", "-C", str(bob), "commit", "-m", "fix: also touch makefile"], capture_output=True, text=True)
+    assert c2.returncode == 0
+
+
 def load_tests(loader, tests, pattern):
     return make_suite(sys.modules[__name__])

@@ -20,15 +20,20 @@ def test_init_repo_preserves_existing_hook_and_is_idempotent(tmp_path: Path):
     pre_commit.chmod(0o755)
 
     init_repo(str(repo), stake_bin="/usr/local/bin/stake")
-    init_repo(str(repo), stake_bin="/usr/local/bin/stake")  # second run must be idempotent
+    first_hook = pre_commit.read_text()
+    first_agents = (repo / "AGENTS.md").read_text()
+
+    init_repo(str(repo), stake_bin="/usr/local/bin/stake")  # second run must be byte-idempotent
 
     content = pre_commit.read_text()
+    assert content == first_hook
     assert content.startswith("#!/bin/sh\necho 'running linter'\n")
     assert content.count(HOOK_START_MARKER) == 1
     assert "stake hook pre-commit" in content
     assert bool(pre_commit.stat().st_mode & stat.S_IXUSR)
 
     agents_md = (repo / "AGENTS.md").read_text()
+    assert agents_md == first_agents
     assert agents_md.count(AGENTS_START_MARKER) == 1
     assert "stake claim" in agents_md
 

@@ -139,10 +139,19 @@ def format_collision_brief(my_claim: ClaimRecord, matches: list[OverlapMatch]) -
 def format_active_claims_for_agent(my_claim: ClaimRecord, all_claims: list[ClaimRecord]) -> str:
     """Format active foreign claims for an agent to evaluate during planning."""
     my_email = my_claim.owner_email.strip().lower()
+    my_files = set(my_claim.files)
+    my_modules = set(my_claim.modules)
     foreign = [
         c for c in all_claims
         if c.claim_id != my_claim.claim_id and c.owner_email.strip().lower() != my_email
     ]
+    foreign.sort(
+        key=lambda c: (
+            -len(my_files.intersection(c.files)),
+            -len(my_modules.intersection(c.modules)),
+            c.claim_id,
+        )
+    )
     if not foreign:
         return f"Stake registered claim '{my_claim.claim_id}'. No active teammate claims in the 72h window.\n"
 

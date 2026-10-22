@@ -67,6 +67,9 @@ def cmd_claim(args: argparse.Namespace) -> int:
     if state.branch != branch:
         state = LocalState(branch=branch)
 
+    claim_id = make_claim_id(owner_email, branch)
+    existing = {c.claim_id: c for c in read_local_claim_refs(repo_path)}.get(claim_id)
+
     my_claim = ClaimRecord.create(
         owner_email=owner_email,
         owner_name=owner_name,
@@ -76,15 +79,24 @@ def cmd_claim(args: argparse.Namespace) -> int:
         diagnosis_and_fix=args.fix,
         files=files,
         stage="planned",
-        ticket=args.ticket,
+        ticket=args.ticket or (existing.ticket if existing else None),
         last_commit_sha=_short_head(repo_path),
+        created_at=existing.created_at if existing else None,
     )
 
     active_claims, remote_ok = sync_claims_with_remote(repo_path, push_claim=my_claim)
     if not remote_ok:
         sys.stderr.write("stake: remote unreachable, continuing offline\n")
 
-    matches = find_overlaps(my_claim, active_claims, seen_claims=state.seen_claims)
+    drifted_files = set(my_claim.files) - set(state.declared_files)
+    drifted_modules = set(my_claim.modules) - set(state.declared_modules)
+    effective_seen = set(state.seen_claims)
+    if drifted_files or drifted_modules:
+        for c in active_claims:
+            if drifted_files.intersection(c.files) or drifted_modules.intersection(c.modules):
+                effective_seen.discard(c.claim_id)
+
+    matches = find_overlaps(my_claim, active_claims, seen_claims=sorted(effective_seen))
     sys.stdout.write(format_active_claims_for_agent(my_claim, active_claims))
     if matches:
         sys.stdout.write("\n" + format_collision_brief(my_claim, matches))
@@ -121,6 +133,9 @@ def cmd_hook_pre_commit(args: argparse.Namespace) -> int:
     if state.branch != branch:
         state = LocalState(branch=branch)
 
+    claim_id = make_claim_id(owner_email, branch)
+    existing = {c.claim_id: c for c in read_local_claim_refs(repo_path)}.get(claim_id)
+
     drifted = bool(
         state.claim_id
         and has_module_drift(staged, state.declared_modules, state.declared_files)
@@ -128,19 +143,22 @@ def cmd_hook_pre_commit(args: argparse.Namespace) -> int:
     drifted_modules = set(derive_modules(staged)) - set(state.declared_modules) if drifted else set()
 
     combined_files = sorted(set(state.declared_files) | set(staged))
-    symptom = state.symptom or f"Changes on branch {branch}"
-    fix = state.diagnosis_and_fix or f"Modifying {', '.join(staged[:5])}"
+    drifted_files = set(combined_files) - set(state.declared_files) if drifted else set()
+    symptom = (existing.symptom if existing else state.symptom) or f"Changes on branch {branch}"
+    fix = (existing.diagnosis_and_fix if existing else state.diagnosis_and_fix) or f"Modifying {', '.join(staged[:5])}"
 
     my_claim = ClaimRecord.create(
         owner_email=owner_email,
         owner_name=owner_name,
         branch=branch,
-        base_branch=base_branch,
+        base_branch=existing.base_branch if existing else base_branch,
         symptom=symptom,
         diagnosis_and_fix=fix,
         files=combined_files,
         stage="committed",
+        ticket=existing.ticket if existing else None,
         last_commit_sha=_short_head(repo_path),
+        created_at=existing.created_at if existing else None,
     )
 
     active_claims, remote_ok = sync_claims_with_remote(repo_path, push_claim=my_claim)
@@ -156,9 +174,9 @@ def cmd_hook_pre_commit(args: argparse.Namespace) -> int:
         return 0
 
     effective_seen = set(state.seen_claims)
-    if drifted_modules:
+    if drifted_modules or drifted_files:
         for c in active_claims:
-            if drifted_modules.intersection(c.modules):
+            if drifted_modules.intersection(c.modules) or drifted_files.intersection(c.files):
                 effective_seen.discard(c.claim_id)
 
     matches = find_overlaps(my_claim, active_claims, seen_claims=sorted(effective_seen))
@@ -188,6 +206,8 @@ def cmd_hook_pre_push(args: argparse.Namespace) -> int:
     repo_path = args.repo
     owner_email, owner_name, branch, base_branch = get_repo_identity(repo_path)
     state = load_local_state(repo_path)
+    if state.branch != branch:
+        state = LocalState(branch=branch)
     claim_id = make_claim_id(owner_email, branch)
     existing = {c.claim_id: c for c in read_local_claim_refs(repo_path)}.get(claim_id)
 

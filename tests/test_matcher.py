@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from stake.models import ClaimRecord
 from stake.matcher import (
     find_overlaps,
+    format_active_claims_for_agent,
     format_collision_brief,
     has_module_drift,
 )
@@ -53,6 +54,15 @@ def test_self_match_and_seen_claims_are_filtered_out():
 def test_has_module_drift_detects_undeclared_directory():
     assert not has_module_drift(["src/permissions/b.ts"], ["src/permissions"], ["src/permissions/a.ts"])
     assert has_module_drift(["src/billing/invoice.ts"], ["src/permissions"], ["src/permissions/a.ts"])
+
+
+def test_format_active_claims_orders_overlapping_first():
+    mine = _claim("me@example.com", "fix/mine", "development", "s", "f", ["src/permissions/resolver.ts"])
+    unrelated_aaa = _claim("aaa@example.com", "fix/unrel", "development", "s", "f", ["src/billing/inv.ts"])
+    overlapping_zzz = _claim("zzz@example.com", "fix/perm", "development", "s", "f", ["src/permissions/org_loader.ts"])
+
+    out = format_active_claims_for_agent(mine, [unrelated_aaa, overlapping_zzz])
+    assert out.index(overlapping_zzz.claim_id) < out.index(unrelated_aaa.claim_id)
 
 
 def load_tests(loader, tests, pattern):

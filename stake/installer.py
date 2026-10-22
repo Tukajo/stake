@@ -20,11 +20,15 @@ def _upsert_fenced_block(existing: str, start_marker: str, end_marker: str, bloc
     if start_marker in existing and end_marker in existing:
         before, rest = existing.split(start_marker, 1)
         _, after = rest.split(end_marker, 1)
-        return f"{before.rstrip()}\n{block.strip()}\n{after.lstrip()}"
-    if not existing:
+        before_clean = before.rstrip("\r\n")
+        after_clean = after.lstrip("\r\n")
+        prefix = f"{before_clean}\n\n" if before_clean else ""
+        suffix = f"\n{after_clean}" if after_clean else ""
+        return f"{prefix}{block.strip()}\n{suffix}"
+    before_clean = existing.rstrip("\r\n")
+    if not before_clean:
         return block.strip() + "\n"
-    sep = "" if existing.endswith("\n") else "\n"
-    return f"{existing}{sep}\n{block.strip()}\n"
+    return f"{before_clean}\n\n{block.strip()}\n"
 
 
 def _resolve_hooks_dir(repo_root: Path, git_common_dir: Path) -> Path:
