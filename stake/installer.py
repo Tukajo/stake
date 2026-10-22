@@ -1,6 +1,7 @@
 """Non-destructive Git hook and AGENTS.md onboarding installer for Stake."""
 from __future__ import annotations
 
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -13,6 +14,8 @@ AGENTS_END_MARKER: str = "<!-- stake:end -->"
 
 
 def _default_stake_bin() -> str:
+    if shutil.which("stake"):
+        return "stake"
     return str(Path(__file__).resolve().parent.parent / "bin" / "stake")
 
 
@@ -41,7 +44,13 @@ def _resolve_hooks_dir(repo_root: Path, git_common_dir: Path) -> Path:
     custom = res.stdout.strip()
     if custom:
         p = Path(custom).expanduser()
-        return p if p.is_absolute() else (repo_root / p)
+        resolved = p if p.is_absolute() else (repo_root / p)
+        # Husky v9 sets core.hooksPath to .husky/_, but user-editable and
+        # version-controlled hooks reside in .husky. Writing into _ is wiped
+        # by husky prepare scripts and gitignored.
+        if resolved.name == "_" and (resolved.parent / "_").is_dir():
+            return resolved.parent
+        return resolved
     return git_common_dir / "hooks"
 
 
@@ -52,7 +61,9 @@ def _install_hook_file(hook_path: Path, subcommand: str, stake_bin: str, allow_f
     block = "\n".join([
         HOOK_START_MARKER,
         f'STAKE_BIN="${{STAKE_BIN:-{stake_bin}}}"',
-        'if [ -x "$STAKE_BIN" ]; then',
+        'if command -v "$STAKE_BIN" >/dev/null 2>&1; then',
+        f'  "$STAKE_BIN" hook {subcommand}{suffix}',
+        'elif [ -x "$STAKE_BIN" ]; then',
         f'  "$STAKE_BIN" hook {subcommand}{suffix}',
         'elif command -v stake >/dev/null 2>&1; then',
         f'  stake hook {subcommand}{suffix}',
@@ -66,6 +77,7 @@ def _install_hook_file(hook_path: Path, subcommand: str, stake_bin: str, allow_f
 
 
 def _agents_md_block(stake_bin: str) -> str:
+    cmd_name = "stake" if shutil.which("stake") or stake_bin == "stake" else stake_bin
     return f"""{AGENTS_START_MARKER}
 ## Workflow Coordination (`stake`)
 
@@ -73,13 +85,13 @@ This repository uses **Stake** (`refs/stake/claims/*`) as a serverless show-once
 
 1. **One-time clone bootstrap:** If `.git/hooks/pre-commit` does not yet contain `{HOOK_START_MARKER}`, run:
    ```bash
-   {stake_bin} init
+   {cmd_name} init
    ```
 2. **At Diagnosis / Plan Time (before writing code):** Once you have investigated the symptom and know your root cause, proposed fix, and target files, declare your claim:
    ```bash
-   {stake_bin} claim --symptom "<1-sentence issue>" --fix "<1-2 sentence root cause & proposed change>" --files "<comma-separated repo-relative files>"
+   {cmd_name} claim --symptom "<1-sentence issue>" --fix "<1-2 sentence root cause & proposed change>" --files "<comma-separated repo-relative files>"
    ```
-3. **Evaluate & surface once:** Read the active teammate claims printed by `stake claim`. If another developer's in-flight or recently landed claim solves the same root cause or touches the same/adjacent files in the same module (including across `release/stg` vs. `development`), present a brief side-by-side comparison to the user. If the user chooses to proceed anyway (or re-runs `git commit`), `stake` records the claim as seen and never blocks flow twice.
+3. **Evaluate & surface once:** Read the active teammate claims printed by `{cmd_name} claim`. If another developer's in-flight or recently landed claim solves the same root cause or touches the same/adjacent files in the same module (including across `release/stg` vs. `development`), present a brief side-by-side comparison to the user. If the user chooses to proceed anyway (or re-runs `git commit`), `stake` records the claim as seen and never blocks flow twice.
 {AGENTS_END_MARKER}"""
 
 

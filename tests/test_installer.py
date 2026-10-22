@@ -50,5 +50,20 @@ def test_init_repo_respects_custom_core_hooks_path(tmp_path: Path):
     assert (custom_dir / "pre-push").exists()
 
 
+def test_init_repo_supports_husky_hooks_path(tmp_path: Path):
+    repo = tmp_path / "husky_repo"
+    subprocess.run(["git", "init", str(repo)], check=True, capture_output=True)
+    husky_dir = repo / ".husky"
+    husky_internal = husky_dir / "_"
+    husky_internal.mkdir(parents=True)
+    (husky_internal / ".gitignore").write_text("*")
+    subprocess.run(["git", "-C", str(repo), "config", "core.hooksPath", ".husky/_"], check=True, capture_output=True)
+
+    init_repo(str(repo), stake_bin="/usr/local/bin/stake")
+    assert (husky_dir / "pre-commit").exists()
+    assert (husky_dir / "pre-push").exists()
+    assert not (husky_internal / "pre-push").exists()
+
+
 def load_tests(loader, tests, pattern):
     return make_suite(sys.modules[__name__])
