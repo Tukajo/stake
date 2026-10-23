@@ -199,7 +199,11 @@ def sync_claims_with_remote(
     except (subprocess.SubprocessError, OSError):
         remote_ok = False
 
-    if push_claim is not None:
+    fetched_ids: set[str] = set()
+    if remote_ok:
+        fetched_ids = {c.claim_id for c in read_local_claim_refs(repo_path)}
+
+    if push_claim is not None and not push_claim.is_expired(current_time):
         write_local_claim_ref(repo_path, push_claim)
 
     all_local = read_local_claim_refs(repo_path)
@@ -214,30 +218,37 @@ def sync_claims_with_remote(
             active.append(claim)
 
     if remote_ok:
-        for exp_id in expired_ids:
-            try:
-                _run_git(
-                    repo_path,
-                    ["push", "--no-verify", "origin", "--delete", f"{REF_PREFIX}{exp_id}"],
-                    timeout=timeout,
-                    check=False,
-                )
-            except (subprocess.SubprocessError, OSError):
-                pass
+        delete_refspecs = [f":{REF_PREFIX}{exp_id}" for exp_id in expired_ids if exp_id in fetched_ids]
+        push_refspecs = (
+            [f"+{REF_PREFIX}{push_claim.claim_id}:{REF_PREFIX}{push_claim.claim_id}"]
+            if push_claim is not None and not push_claim.is_expired(current_time)
+            else []
+        )
+        batch_refspecs = [*delete_refspecs, *push_refspecs]
 
-        if push_claim is not None and not push_claim.is_expired(current_time):
-            ref = f"{REF_PREFIX}{push_claim.claim_id}"
+        if batch_refspecs:
             try:
                 push_res = _run_git(
                     repo_path,
-                    ["push", "--no-verify", "--force", "origin", f"{ref}:{ref}"],
+                    ["push", "--no-verify", "origin", *batch_refspecs],
                     timeout=timeout,
                     check=False,
                 )
                 if push_res.returncode != 0:
-                    remote_ok = False
+                    if delete_refspecs and push_refspecs:
+                        retry_res = _run_git(
+                            repo_path,
+                            ["push", "--no-verify", "origin", *push_refspecs],
+                            timeout=timeout,
+                            check=False,
+                        )
+                        if retry_res.returncode != 0:
+                            remote_ok = False
+                    elif push_refspecs:
+                        remote_ok = False
             except (subprocess.SubprocessError, OSError):
-                remote_ok = False
+                if push_refspecs:
+                    remote_ok = False
 
     return active, remote_ok
 
