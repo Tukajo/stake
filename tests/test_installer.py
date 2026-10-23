@@ -140,6 +140,48 @@ def test_setup_user_preserves_and_chains_previous_global_hooks_path(tmp_path: Pa
     assert prev_marker.exists()
 
 
+def test_global_pre_push_replays_stdin_across_previous_and_local_hooks(tmp_path: Path):
+    home = tmp_path / "home"
+    home.mkdir(parents=True)
+    prev_hooks = tmp_path / "prev_global_hooks"
+    prev_hooks.mkdir(parents=True)
+    prev_stdin_out = tmp_path / "prev_stdin.txt"
+    prev_pre_push = prev_hooks / "pre-push"
+    prev_pre_push.write_text(f"#!/bin/sh\ncat > '{prev_stdin_out}'\nexit 0\n")
+    prev_pre_push.chmod(0o755)
+
+    subprocess.run(
+        ["git", "config", "--file", str(home / ".gitconfig"), "core.hooksPath", str(prev_hooks)],
+        check=True,
+    )
+
+    cfg = home / ".config" / "stake"
+    dummy_stake = tmp_path / "dummy_stake"
+    dummy_stake.write_text("#!/bin/sh\nexit 0\n")
+    dummy_stake.chmod(0o755)
+
+    info = setup_user(home_dir=home, config_dir=cfg, stake_bin=str(dummy_stake))
+
+    repo = tmp_path / "repo"
+    subprocess.run(["git", "init", str(repo)], check=True, capture_output=True)
+    local_stdin_out = tmp_path / "local_stdin.txt"
+    local_pre_push = repo / ".git" / "hooks" / "pre-push"
+    local_pre_push.write_text(f"#!/bin/sh\ncat > '{local_stdin_out}'\nexit 0\n")
+    local_pre_push.chmod(0o755)
+
+    payload = "refs/heads/main 1111111 refs/heads/main 0000000\n"
+    res = subprocess.run(
+        [info["pre_push"]],
+        cwd=str(repo),
+        input=payload,
+        capture_output=True,
+        text=True,
+    )
+    assert res.returncode == 0
+    assert prev_stdin_out.read_text() == payload
+    assert local_stdin_out.read_text() == payload
+
+
 def test_upsert_fenced_block_handles_exit_variants():
     block = f"{HOOK_START_MARKER}\necho 'stake'\n{HOOK_END_MARKER}"
 

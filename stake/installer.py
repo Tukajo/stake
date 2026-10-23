@@ -56,19 +56,35 @@ def _global_hook_script(
     allow_fail: bool = False,
 ) -> str:
     suffix = " || true" if allow_fail else " || exit $?"
-    return "\n".join([
+    is_pre_push = subcommand == "pre-push"
+    stdin_capture = 'STDIN_DATA="$(cat)"' if is_pre_push else ""
+    prev_invoke = (
+        'if [ -n "$STDIN_DATA" ]; then printf \'%s\\n\' "$STDIN_DATA"; fi | STAKE_HOOK_CHAINED=1 "$PREV_HOOK" "$@" || exit $?'
+        if is_pre_push
+        else 'STAKE_HOOK_CHAINED=1 "$PREV_HOOK" "$@" || exit $?'
+    )
+    local_invoke = (
+        'if [ -n "$STDIN_DATA" ]; then printf \'%s\\n\' "$STDIN_DATA"; fi | STAKE_HOOK_CHAINED=1 "$LOCAL_HOOK" "$@" || exit $?'
+        if is_pre_push
+        else 'STAKE_HOOK_CHAINED=1 "$LOCAL_HOOK" "$@" || exit $?'
+    )
+    lines = [
         "#!/usr/bin/env sh",
         HOOK_START_MARKER,
         f'HOOK_NAME="{subcommand}"',
         'SELF_PATH="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"',
         f'PREV_HOOKS_FILE="{prev_hooks_file}"',
+    ]
+    if stdin_capture:
+        lines.append(stdin_capture)
+    lines.extend([
         'if [ "${STAKE_HOOK_CHAINED:-0}" != "1" ]; then',
         '  if [ -f "$PREV_HOOKS_FILE" ]; then',
         '    PREV_DIR="$(cat "$PREV_HOOKS_FILE" 2>/dev/null)"',
         '    if [ -n "$PREV_DIR" ] && [ -x "$PREV_DIR/$HOOK_NAME" ]; then',
         '      PREV_HOOK="$(cd "$PREV_DIR" 2>/dev/null && pwd)/$HOOK_NAME"',
         '      if [ "$PREV_HOOK" != "$SELF_PATH" ]; then',
-        '        STAKE_HOOK_CHAINED=1 "$PREV_HOOK" "$@" || exit $?',
+        f'        {prev_invoke}',
         '      fi',
         '    fi',
         '  fi',
@@ -76,7 +92,7 @@ def _global_hook_script(
         '  if [ -n "$GIT_COMMON" ] && [ -x "$GIT_COMMON/hooks/$HOOK_NAME" ]; then',
         '    LOCAL_HOOK="$(cd "$GIT_COMMON/hooks" 2>/dev/null && pwd)/$HOOK_NAME"',
         '    if [ "$LOCAL_HOOK" != "$SELF_PATH" ] && ! grep -q "# --- stake-hook-start ---" "$LOCAL_HOOK" 2>/dev/null; then',
-        '      STAKE_HOOK_CHAINED=1 "$LOCAL_HOOK" "$@" || exit $?',
+        f'        {local_invoke}',
         '    fi',
         '  fi',
         'fi',
@@ -91,6 +107,7 @@ def _global_hook_script(
         HOOK_END_MARKER,
         "",
     ])
+    return "\n".join(lines)
 
 
 def _husky_init_block(stake_bin: str) -> str:

@@ -12,6 +12,7 @@ from stake.config import (
     get_repo_identifiers,
     is_repo_allowed,
     load_config,
+    normalize_pattern,
     primary_repo_id,
     save_config,
 )
@@ -86,7 +87,11 @@ def cmd_enable(args: argparse.Namespace) -> int:
     repo_id = norm_origin or repo_root
     remove_set = {x.lower() for x in (repo_id, norm_origin, repo_root) if x}
     cfg = load_config()
-    cfg.exclude = [item for item in cfg.exclude if item.strip().lower() not in remove_set]
+    cfg.exclude = [
+        item
+        for item in cfg.exclude
+        if item.strip().lower() not in remove_set and normalize_pattern(item) not in remove_set
+    ]
     save_config(cfg)
     if not is_repo_allowed(args.repo):
         cfg.include.append(repo_id)

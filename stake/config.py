@@ -12,7 +12,7 @@ from stake.git_refs import _run_git, get_git_dirs
 
 CONFIG_FILENAME: str = "config.json"
 _SCHEME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*://")
-_USER_PREFIX_RE = re.compile(r"^[^/@:]+@")
+_USER_PREFIX_RE = re.compile(r"^[^/]+@")
 _PORT_PATH_RE = re.compile(r"^\d+(/|$)")
 
 
@@ -109,13 +109,16 @@ def normalize_remote_url(raw_url: str) -> str:
     return s.lower()
 
 
-def _normalize_pattern(pattern: str) -> str:
+def normalize_pattern(pattern: str) -> str:
     p = pattern.strip()
     if not p:
         return ""
     if _SCHEME_RE.match(p) or _USER_PREFIX_RE.match(p) or p.endswith(".git") or p.endswith(".git/"):
         return normalize_remote_url(p)
     return p.lower()
+
+
+_normalize_pattern = normalize_pattern
 
 
 def get_repo_identifiers(repo_path: str = ".") -> tuple[str, str]:

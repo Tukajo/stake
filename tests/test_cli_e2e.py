@@ -244,8 +244,12 @@ def test_e2e_disable_and_enable_repo(tmp_path: Path):
     assert c_res.returncode == 0
     assert read_local_claim_refs(str(alice)) == []
 
-    # Re-enable restores normal claim registration
+    # Re-enable restores normal claim registration (including when exclude had a raw .git URL)
+    from stake.config import StakeConfig, is_repo_allowed, save_config
+    save_config(StakeConfig(include=["*"], exclude=[f"file://{alice.parent / 'origin.git'}"]))
+    assert is_repo_allowed(str(alice)) is False
     assert main(["enable", "--repo", str(alice)]) == 0
+    assert is_repo_allowed(str(alice)) is True
     assert main([
         "claim", "--repo", str(alice),
         "--symptom", "Active symptom",

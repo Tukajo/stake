@@ -18,6 +18,7 @@ from tests._runner import make_suite
 def test_normalize_remote_url_variants():
     assert normalize_remote_url("git@github.com:Tukajo/stake.git") == "github.com/tukajo/stake"
     assert normalize_remote_url("https://github.com/Tukajo/stake.git/") == "github.com/tukajo/stake"
+    assert normalize_remote_url("https://oauth2:ghp_secret123@github.com/Tukajo/stake.git") == "github.com/tukajo/stake"
     assert normalize_remote_url("http://192.168.1.220:3000/Tukajo/stake.git") == "192.168.1.220:3000/tukajo/stake"
     assert normalize_remote_url("ssh://git@192.168.1.220:2222/Tukajo/stake.git") == "192.168.1.220:2222/tukajo/stake"
     assert normalize_remote_url("/tmp/SomeRepo/origin.git") == "/tmp/somerepo/origin"
