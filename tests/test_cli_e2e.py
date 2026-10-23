@@ -150,5 +150,76 @@ def test_e2e_root_file_drift_and_metadata_preservation(tmp_path: Path):
     assert c2.returncode == 0
 
 
+def test_e2e_mutated_teammate_claim_resurfaces_at_precommit_once(tmp_path: Path):
+    stake_bin = Path(__file__).resolve().parent.parent / "bin" / "stake"
+    _, alice, bob = _setup_two_devs(tmp_path, stake_bin)
+
+    subprocess.run(["git", "-C", str(bob), "checkout", "-b", "feat/bob-task"], check=True, capture_output=True)
+    assert main([
+        "claim", "--repo", str(bob),
+        "--symptom", "Billing export slow",
+        "--fix", "Optimize invoice formatter",
+        "--files", "src/billing/invoice.ts",
+    ]) == 0
+
+    subprocess.run(["git", "-C", str(alice), "checkout", "-b", "fix/alice-auth"], check=True, capture_output=True)
+    assert main([
+        "claim", "--repo", str(alice),
+        "--symptom", "Auth check timeout",
+        "--fix", "Cache resolver lookup",
+        "--files", "src/permissions/resolver.ts",
+    ]) == 0
+
+    # Bob mutates his claim on the same branch onto Alice's file
+    assert main([
+        "claim", "--repo", str(bob),
+        "--symptom", "Billing export slow due to permission check",
+        "--fix", "Batch resolver permission lookup",
+        "--files", "src/permissions/resolver.ts",
+    ]) == 0
+
+    (alice / "src" / "permissions" / "resolver.ts").write_text("export const resolve = () => 'fast';\n")
+    subprocess.run(["git", "-C", str(alice), "add", "."], check=True, capture_output=True)
+
+    c1 = subprocess.run(["git", "-C", str(alice), "commit", "-m", "fix: cache resolver"], capture_output=True, text=True)
+    assert c1.returncode != 0
+    assert "bob@example.com" in c1.stderr
+
+    c2 = subprocess.run(["git", "-C", str(alice), "commit", "-m", "fix: cache resolver"], capture_output=True, text=True)
+    assert c2.returncode == 0
+
+
+def test_e2e_same_user_parallel_worktrees_detect_collision(tmp_path: Path):
+    stake_bin = Path(__file__).resolve().parent.parent / "bin" / "stake"
+    _, alice, _ = _setup_two_devs(tmp_path, stake_bin)
+
+    subprocess.run(["git", "-C", str(alice), "checkout", "-b", "fix/wt-one"], check=True, capture_output=True)
+    wt2 = tmp_path / "alice_wt2"
+    subprocess.run(["git", "-C", str(alice), "worktree", "add", "-b", "hotfix/wt-two", str(wt2), "release/stg"], check=True, capture_output=True)
+
+    assert main([
+        "claim", "--repo", str(alice),
+        "--symptom", "Dashboard 504",
+        "--fix", "Batch org permission loader",
+        "--files", "src/permissions/org_loader.ts",
+    ]) == 0
+
+    (wt2 / "src" / "permissions" / "resolver.ts").write_text("export const resolve = () => 'wt2';\n")
+    subprocess.run(["git", "-C", str(wt2), "add", "."], check=True, capture_output=True)
+
+    c1 = subprocess.run(["git", "-C", str(wt2), "commit", "-m", "hotfix: resolver"], capture_output=True, text=True)
+    assert c1.returncode != 0
+    assert "fix/wt-one" in c1.stderr
+
+    c2 = subprocess.run(["git", "-C", str(wt2), "commit", "-m", "hotfix: resolver"], capture_output=True, text=True)
+    assert c2.returncode == 0
+
+
+def test_e2e_version_flag():
+    stake_bin = Path(__file__).resolve().parent.parent / "bin" / "stake"
+    res = subprocess.run([str(stake_bin), "--version"], capture_output=True, text=True, check=True)
+    assert res.stdout.strip() == "stake 0.2.0"
+
+
 def load_tests(loader, tests, pattern):
     return make_suite(sys.modules[__name__])

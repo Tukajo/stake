@@ -8,6 +8,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from stake import __version__
 from stake.git_refs import (
     REF_PREFIX,
     _run_git,
@@ -24,6 +25,7 @@ from stake.matcher import (
     format_active_claims_for_agent,
     format_collision_brief,
     has_module_drift,
+    modules_overlap,
 )
 from stake.models import ClaimRecord, LocalState, derive_modules, make_claim_id
 
@@ -93,8 +95,9 @@ def cmd_claim(args: argparse.Namespace) -> int:
     effective_seen = set(state.seen_claims)
     if drifted_files or drifted_modules:
         for c in active_claims:
-            if drifted_files.intersection(c.files) or drifted_modules.intersection(c.modules):
+            if drifted_files.intersection(c.files) or modules_overlap(drifted_modules, c.modules):
                 effective_seen.discard(c.claim_id)
+                effective_seen.discard(c.receipt_key())
 
     matches = find_overlaps(my_claim, active_claims, seen_claims=sorted(effective_seen))
     sys.stdout.write(format_active_claims_for_agent(my_claim, active_claims))
@@ -104,7 +107,7 @@ def cmd_claim(args: argparse.Namespace) -> int:
     seen_set = set(state.seen_claims)
     for c in active_claims:
         if c.claim_id != my_claim.claim_id:
-            seen_set.add(c.claim_id)
+            seen_set.add(c.receipt_key())
 
     new_state = LocalState(
         claim_id=my_claim.claim_id,
@@ -176,11 +179,12 @@ def cmd_hook_pre_commit(args: argparse.Namespace) -> int:
     effective_seen = set(state.seen_claims)
     if drifted_modules or drifted_files:
         for c in active_claims:
-            if drifted_modules.intersection(c.modules) or drifted_files.intersection(c.files):
+            if modules_overlap(drifted_modules, c.modules) or drifted_files.intersection(c.files):
                 effective_seen.discard(c.claim_id)
+                effective_seen.discard(c.receipt_key())
 
     matches = find_overlaps(my_claim, active_claims, seen_claims=sorted(effective_seen))
-    seen_set = set(state.seen_claims) | {m.claim.claim_id for m in matches}
+    seen_set = set(state.seen_claims) | {m.claim.receipt_key() for m in matches}
 
     new_state = LocalState(
         claim_id=my_claim.claim_id,
@@ -282,6 +286,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="stake",
         description="Serverless Git-ref duplicate-work radar for multi-agent teams.",
     )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_init = sub.add_parser("init", help="Install non-destructive hooks and AGENTS.md block into a repository")
