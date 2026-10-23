@@ -21,6 +21,95 @@ def test_derive_modules_ignores_repo_root_files():
     assert derive_modules(files) == ["pkg/api/v1", "src/permissions"]
 
 
+def test_derive_modules_ignores_top_level_containers():
+    files = [
+        "README.md",
+        "src/index.ts",
+        "lib/helper.py",
+        "app/main.go",
+        "pkg/version.go",
+        "tests/run.py",
+        "docs/guide.md",
+        "src/permissions/org_loader.ts",
+        "pkg/api/v1/handler.go",
+    ]
+    assert derive_modules(files) == ["pkg/api/v1", "src/permissions"]
+
+
+def test_top_level_containers_constant():
+    from stake.models import _TOP_LEVEL_CONTAINERS
+    expected = {"src", "lib", "app", "pkg", "packages", "internal", "cmd", "test", "tests", "docs"}
+    assert _TOP_LEVEL_CONTAINERS == frozenset(expected)
+
+
+def test_claim_receipt_key_ignores_stage_and_timestamps_but_changes_on_mutation():
+    t0 = datetime(2026, 10, 22, 16, 0, 0, tzinfo=timezone.utc)
+    t1 = t0 + timedelta(minutes=15)
+    planned = ClaimRecord.create(
+        owner_email="bob@example.com",
+        owner_name="Bob",
+        branch="feat/x",
+        base_branch="development",
+        symptom="Login error",
+        diagnosis_and_fix="Check token expiry",
+        files=["src/auth/login.ts"],
+        stage="planned",
+        now=t0,
+    )
+    committed = ClaimRecord.create(
+        owner_email="bob@example.com",
+        owner_name="Bob",
+        branch="feat/x",
+        base_branch="development",
+        symptom="Login error",
+        diagnosis_and_fix="Check token expiry",
+        files=["src/auth/login.ts"],
+        stage="committed",
+        last_commit_sha="abc1234",
+        created_at=planned.created_at,
+        now=t1,
+    )
+    mutated_files = ClaimRecord.create(
+        owner_email="bob@example.com",
+        owner_name="Bob",
+        branch="feat/x",
+        base_branch="development",
+        symptom="Login error",
+        diagnosis_and_fix="Check token expiry",
+        files=["src/auth/login.ts", "src/permissions/resolver.ts"],
+        stage="planned",
+        now=t1,
+    )
+    assert planned.receipt_key().startswith(f"{planned.claim_id}@")
+    assert planned.receipt_key() == committed.receipt_key()
+    assert planned.receipt_key() != mutated_files.receipt_key()
+
+    mutated_symptom = ClaimRecord.create(
+        owner_email="bob@example.com",
+        owner_name="Bob",
+        branch="feat/x",
+        base_branch="development",
+        symptom="Different login error",
+        diagnosis_and_fix="Check token expiry",
+        files=["src/auth/login.ts"],
+        stage="planned",
+        now=t0,
+    )
+    mutated_fix = ClaimRecord.create(
+        owner_email="bob@example.com",
+        owner_name="Bob",
+        branch="feat/x",
+        base_branch="development",
+        symptom="Login error",
+        diagnosis_and_fix="Refresh token automatically",
+        files=["src/auth/login.ts"],
+        stage="planned",
+        now=t0,
+    )
+    assert planned.receipt_key() != mutated_symptom.receipt_key()
+    assert planned.receipt_key() != mutated_fix.receipt_key()
+
+
 def test_extract_ticket_finds_jira_style_key():
     assert extract_ticket("fix/PROJ-412-csv-hang", "fixing export") == "PROJ-412"
     assert extract_ticket("hotfix/stg-timeout", "Addresses OPS-99 in loader") == "OPS-99"
