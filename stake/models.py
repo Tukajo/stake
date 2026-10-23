@@ -1,6 +1,7 @@
 """Data models and pure helpers for Stake claims and local receipt state."""
 from __future__ import annotations
 
+import hashlib
 import json
 import posixpath
 import re
@@ -10,6 +11,10 @@ from typing import Any
 
 PLAN_TTL_SECONDS: int = 14400      # 4 hours for uncommitted planned claims
 COMMIT_TTL_SECONDS: int = 259200   # 72 hours for committed / landed claims
+
+_TOP_LEVEL_CONTAINERS: frozenset[str] = frozenset(
+    {"src", "lib", "app", "pkg", "packages", "internal", "cmd", "test", "tests", "docs"}
+)
 
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
 _TICKET_RE = re.compile(r"\b([A-Z][A-Z0-9]{1,9}-\d+)\b")
@@ -38,6 +43,8 @@ def derive_modules(files: list[str]) -> list[str]:
 
     Root-level files (e.g. 'README.md') have no parent module directory and are
     excluded so root file edits do not collide on a synthetic root module.
+    Single-segment generic container directories (e.g. 'src', 'lib') are also
+    excluded.
     """
     modules: set[str] = set()
     for raw in files:
@@ -45,7 +52,7 @@ def derive_modules(files: list[str]) -> list[str]:
         if not norm:
             continue
         parent = posixpath.dirname(norm)
-        if parent and parent != ".":
+        if parent and parent != "." and parent not in _TOP_LEVEL_CONTAINERS:
             modules.add(parent)
     return sorted(modules)
 
@@ -142,6 +149,22 @@ class ClaimRecord:
             return current >= parse_iso_utc(self.expires_at)
         except ValueError:
             return True
+
+    def receipt_key(self) -> str:
+        """Deterministic content fingerprint receipt key over collision-relevant fields."""
+        payload = json.dumps(
+            {
+                "claim_id": self.claim_id,
+                "diagnosis_and_fix": self.diagnosis_and_fix.strip(),
+                "files": sorted(self.files),
+                "modules": sorted(self.modules),
+                "symptom": self.symptom.strip(),
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
+        return f"{self.claim_id}@{digest}"
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
