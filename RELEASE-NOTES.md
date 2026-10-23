@@ -1,5 +1,17 @@
 # Stake Release Notes
 
+## v0.3.0 (2026-10-23)
+
+Stake v0.3.0 moves from per-repository initialization (`stake init`) to a zero-footprint, user-level installation (`stake setup`) with global hook chaining and configurable repository filtering.
+
+### Highlights
+
+- **Global User-Level Setup (`stake setup`):** Replaces per-repository `stake init` with a one-time `stake setup` command. Zero tracked files (`AGENTS.md`, `CLAUDE.md`, `.husky/`) are ever created or modified inside target repositories.
+- **Chained Global Git Hooks (`~/.config/stake/hooks`):** Configures `core.hooksPath` in `~/.gitconfig` to chain any prior global hooks and repository-local hooks (`$(git rev-parse --git-common-dir)/hooks/*`, including linked worktrees and `pre-push` `stdin` replay) before running Stake.
+- **Zero-Footprint Husky Support (`~/.config/husky/init.sh`):** Automatically hooks into Husky repositories at the user level without modifying tracked `.husky/` scripts.
+- **Global Agent Onboarding:** Installs idempotent Stake instructions into `~/.claude/CLAUDE.md` and `~/.gemini/GEMINI.md`, and installs the global agent skill to `~/.agents/skills/stake/SKILL.md`.
+- **Repository Filtering (`~/.config/stake/config.json`) & CLI Escape Hatches (`stake disable` / `stake enable`):** Evaluates `include` (default `["*"]`) and `exclude` (default `[]`) glob patterns against normalized `origin` remote URLs (across SSH, HTTPS, custom ports, and local paths), with `exclude` taking precedence.
+
 ## v0.2.0 (2026-10-22)
 
 Stake v0.2.0 delivers precision improvements across claim receipt tracking, module boundary detection, parallel worktree support, and hook installation resilience.
