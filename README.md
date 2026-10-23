@@ -38,7 +38,7 @@ For comprehensive instructions on configuring and operating `stake` across AI co
 
 📖 **[Stake Agent Playbook](docs/playbook.md)** (also packaged as an agent skill in [`skills/stake/SKILL.md`](skills/stake/SKILL.md))
 
-### Quick Setup
+### Quick Setup (One-Time User-Level Install)
 
 ```bash
 # 1. Ensure stake is on PATH
@@ -46,11 +46,12 @@ mkdir -p ~/.local/bin
 ln -sf /path/to/stake/bin/stake ~/.local/bin/stake
 chmod +x ~/.local/bin/stake
 
-# 2. Initialize target repository
-stake init --repo "<TARGET_REPO>"
+# 2. Configure global Git hooks, ~/.config/stake/config.json, and agent instructions
+stake setup
 
-# 3. Verify status
-stake status --repo "<TARGET_REPO>"
+# 3. Optional: exclude or re-enable specific repositories
+stake disable --repo "<TARGET_REPO>"
+stake enable --repo "<TARGET_REPO>"
 ```
 
 ---

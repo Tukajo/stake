@@ -6,9 +6,15 @@ import json
 import os
 import subprocess
 import sys
-from pathlib import Path
 
 from stake import __version__
+from stake.config import (
+    get_repo_identifiers,
+    is_repo_allowed,
+    load_config,
+    primary_repo_id,
+    save_config,
+)
 from stake.git_refs import (
     REF_PREFIX,
     _run_git,
@@ -19,7 +25,7 @@ from stake.git_refs import (
     save_local_state,
     sync_claims_with_remote,
 )
-from stake.installer import init_repo
+from stake.installer import setup_user
 from stake.matcher import (
     find_overlaps,
     format_active_claims_for_agent,
@@ -50,17 +56,53 @@ def _short_head(repo_path: str) -> str | None:
     return res.stdout.strip()
 
 
-def cmd_init(args: argparse.Namespace) -> int:
-    info = init_repo(args.repo)
-    print(f"Stake initialized in {info['repo_root']}")
-    print(f"  pre-commit : {info['pre_commit']}")
-    print(f"  pre-push   : {info['pre_push']}")
-    print(f"  AGENTS.md  : {info['agents_md']}")
+def cmd_setup(args: argparse.Namespace) -> int:
+    info = setup_user(stake_bin=os.environ.get("STAKE_BIN"))
+    print("Stake configured globally for current user:")
+    print(f"  config.json : {info['config_file']}")
+    print(f"  pre-commit  : {info['pre_commit']}")
+    print(f"  pre-push    : {info['pre_push']}")
+    print(f"  husky init  : {info['husky_init']}")
+    print(f"  CLAUDE.md   : {info['claude_md']}")
+    print(f"  GEMINI.md   : {info['gemini_md']}")
+    print(f"  SKILL.md    : {info['skill_md']}")
+    return 0
+
+
+def cmd_disable(args: argparse.Namespace) -> int:
+    repo_id = primary_repo_id(args.repo)
+    cfg = load_config()
+    if repo_id not in cfg.exclude:
+        cfg.exclude.append(repo_id)
+    if repo_id in cfg.include and repo_id != "*":
+        cfg.include = [item for item in cfg.include if item != repo_id]
+    save_config(cfg)
+    print(f"Stake disabled for '{repo_id}'.")
+    return 0
+
+
+def cmd_enable(args: argparse.Namespace) -> int:
+    norm_origin, repo_root = get_repo_identifiers(args.repo)
+    repo_id = norm_origin or repo_root
+    remove_set = {x.lower() for x in (repo_id, norm_origin, repo_root) if x}
+    cfg = load_config()
+    cfg.exclude = [item for item in cfg.exclude if item.strip().lower() not in remove_set]
+    save_config(cfg)
+    if not is_repo_allowed(args.repo):
+        cfg.include.append(repo_id)
+        save_config(cfg)
+    print(f"Stake enabled for '{repo_id}'.")
     return 0
 
 
 def cmd_claim(args: argparse.Namespace) -> int:
     repo_path = args.repo
+    if not is_repo_allowed(repo_path):
+        sys.stdout.write(
+            f"Stake: repository '{primary_repo_id(repo_path)}' is disabled in config; skipping claim.\n"
+        )
+        return 0
+
     owner_email, owner_name, branch, detected_base = get_repo_identity(repo_path)
     base_branch = args.base or detected_base
     files = _parse_files_csv(args.files)
@@ -127,6 +169,9 @@ def cmd_hook_pre_commit(args: argparse.Namespace) -> int:
         return 0
 
     repo_path = args.repo
+    if not is_repo_allowed(repo_path):
+        return 0
+
     staged = _staged_files(repo_path)
     if not staged:
         return 0
@@ -214,6 +259,9 @@ def cmd_hook_pre_push(args: argparse.Namespace) -> int:
         return 0
 
     repo_path = args.repo
+    if not is_repo_allowed(repo_path):
+        return 0
+
     owner_email, owner_name, branch, base_branch = get_repo_identity(repo_path)
     state = load_local_state(repo_path)
     if state.branch != branch:
@@ -295,9 +343,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p_init = sub.add_parser("init", help="Install non-destructive hooks and AGENTS.md block into a repository")
-    p_init.add_argument("--repo", default=".", help="Target git repository path")
-    p_init.set_defaults(func=cmd_init)
+    p_setup = sub.add_parser("setup", help="Configure global Git hooks, ~/.config/stake/config.json, and user-level agent instructions")
+    p_setup.set_defaults(func=cmd_setup)
+
+    p_disable = sub.add_parser("disable", help="Disable Stake for a repository in ~/.config/stake/config.json")
+    p_disable.add_argument("--repo", default=".", help="Target git repository path")
+    p_disable.set_defaults(func=cmd_disable)
+
+    p_enable = sub.add_parser("enable", help="Re-enable Stake for a repository in ~/.config/stake/config.json")
+    p_enable.add_argument("--repo", default=".", help="Target git repository path")
+    p_enable.set_defaults(func=cmd_enable)
 
     p_claim = sub.add_parser("claim", help="Declare diagnosis and planned fix at planning time")
     p_claim.add_argument("--symptom", required=True, help="1-sentence description of the symptom or issue")

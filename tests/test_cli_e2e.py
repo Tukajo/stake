@@ -1,8 +1,20 @@
+import os
 import subprocess
 import sys
 from pathlib import Path
 from stake.cli import main
 from tests._runner import make_suite
+
+
+def _configure_isolated_user_env(tmp_path: Path, stake_bin: Path) -> Path:
+    home = tmp_path / "user_home"
+    cfg = home / ".config" / "stake"
+    os.environ["STAKE_HOME_DIR"] = str(home)
+    os.environ["STAKE_CONFIG_DIR"] = str(cfg)
+    os.environ["GIT_CONFIG_GLOBAL"] = str(home / ".gitconfig")
+    os.environ["STAKE_BIN"] = str(stake_bin)
+    assert main(["setup"]) == 0
+    return home
 
 
 def _setup_two_devs(tmp_path: Path, stake_bin: Path) -> tuple[Path, Path, Path]:
@@ -33,8 +45,11 @@ def _setup_two_devs(tmp_path: Path, stake_bin: Path) -> tuple[Path, Path, Path]:
     subprocess.run(["git", "-C", str(bob), "config", "user.email", "bob@example.com"], check=True, capture_output=True)
     subprocess.run(["git", "-C", str(bob), "config", "user.name", "Bob"], check=True, capture_output=True)
 
-    assert main(["init", "--repo", str(alice)]) == 0
-    assert main(["init", "--repo", str(bob)]) == 0
+    _configure_isolated_user_env(tmp_path, stake_bin)
+
+    # Zero repository working-tree footprint: no AGENTS.md created in repos
+    assert not (alice / "AGENTS.md").exists()
+    assert not (bob / "AGENTS.md").exists()
     return remote, alice, bob
 
 
@@ -50,7 +65,6 @@ def test_e2e_plan_checkin_and_silent_commit(tmp_path: Path):
         "--files", "src/permissions/org_loader.ts",
     ]) == 0
 
-    # Alice commits within her declared module -> pre-commit is 100% silent and exits 0
     (alice / "src" / "permissions" / "org_loader.ts").write_text("export const load = () => 'batched';\n")
     subprocess.run(["git", "-C", str(alice), "add", "."], check=True, capture_output=True)
     res = subprocess.run(["git", "-C", str(alice), "commit", "-m", "fix: batch loader"], capture_output=True, text=True)
@@ -61,7 +75,6 @@ def test_e2e_skipped_plan_stops_once_at_precommit_then_bypasses_on_retry(tmp_pat
     stake_bin = Path(__file__).resolve().parent.parent / "bin" / "stake"
     _, alice, bob = _setup_two_devs(tmp_path, stake_bin)
 
-    # Alice declares on development
     subprocess.run(["git", "-C", str(alice), "checkout", "-b", "fix/PROJ-412-csv"], check=True, capture_output=True)
     assert main([
         "claim", "--repo", str(alice),
@@ -70,30 +83,29 @@ def test_e2e_skipped_plan_stops_once_at_precommit_then_bypasses_on_retry(tmp_pat
         "--files", "src/permissions/org_loader.ts",
     ]) == 0
 
-    # Bob hotfixes release/stg in adjacent file WITHOUT running `stake claim`
     subprocess.run(["git", "-C", str(bob), "checkout", "-b", "hotfix/OPS-88-504"], check=True, capture_output=True)
     (bob / "src" / "permissions" / "resolver.ts").write_text("export const resolve = () => 'cached';\n")
     subprocess.run(["git", "-C", str(bob), "add", "."], check=True, capture_output=True)
 
-    # First commit attempt warns once about Alice's cross-branch overlap and exits non-zero
     c1 = subprocess.run(["git", "-C", str(bob), "commit", "-m", "fix: cache resolver"], capture_output=True, text=True)
     assert c1.returncode != 0
     assert "alice@example.com" in c1.stderr
     assert "CROSS-BRANCH" in c1.stderr
 
-    # Second commit attempt immediately succeeds (show-once semantics)
     c2 = subprocess.run(["git", "-C", str(bob), "commit", "-m", "fix: cache resolver"], capture_output=True, text=True)
     assert c2.returncode == 0
 
 
 def test_e2e_cli_offline_remote_logs_warning_and_exits_zero(tmp_path: Path):
+    stake_bin = Path(__file__).resolve().parent.parent / "bin" / "stake"
+    _configure_isolated_user_env(tmp_path, stake_bin)
+
     repo = tmp_path / "offline_cli"
     subprocess.run(["git", "init", str(repo)], check=True, capture_output=True)
     subprocess.run(["git", "-C", str(repo), "config", "user.email", "dev@example.com"], check=True, capture_output=True)
     subprocess.run(["git", "-C", str(repo), "config", "user.name", "Dev"], check=True, capture_output=True)
     subprocess.run(["git", "-C", str(repo), "remote", "add", "origin", "/nonexistent/origin.git"], check=True, capture_output=True)
 
-    assert main(["init", "--repo", str(repo)]) == 0
     (repo / "a.py").write_text("x = 1\n")
     subprocess.run(["git", "-C", str(repo), "add", "a.py"], check=True, capture_output=True)
     commit_res = subprocess.run(["git", "-C", str(repo), "commit", "-m", "offline commit"], capture_output=True, text=True)
@@ -107,7 +119,6 @@ def test_e2e_root_file_drift_and_metadata_preservation(tmp_path: Path):
     stake_bin = Path(__file__).resolve().parent.parent / "bin" / "stake"
     _, alice, bob = _setup_two_devs(tmp_path, stake_bin)
 
-    # Alice claims root-level Makefile
     subprocess.run(["git", "-C", str(alice), "checkout", "-b", "fix/root-makefile"], check=True, capture_output=True)
     assert main([
         "claim", "--repo", str(alice),
@@ -118,7 +129,6 @@ def test_e2e_root_file_drift_and_metadata_preservation(tmp_path: Path):
         "--base", "release/stg",
     ]) == 0
 
-    # Alice commits Makefile -> verify custom ticket & base_branch preserved on transition to committed
     (alice / "Makefile").write_text("all:\n\techo ok\n")
     subprocess.run(["git", "-C", str(alice), "add", "Makefile"], check=True, capture_output=True)
     res_a = subprocess.run(["git", "-C", str(alice), "commit", "-m", "fix: makefile"], capture_output=True, text=True)
@@ -129,7 +139,6 @@ def test_e2e_root_file_drift_and_metadata_preservation(tmp_path: Path):
     assert alice_claims[0].base_branch == "release/stg"
     assert alice_claims[0].stage == "committed"
 
-    # Bob claims an unrelated file in src/permissions/resolver.ts (so Alice's Makefile claim is fetched & marked seen)
     subprocess.run(["git", "-C", str(bob), "checkout", "-b", "fix/bob-task"], check=True, capture_output=True)
     assert main([
         "claim", "--repo", str(bob),
@@ -138,14 +147,12 @@ def test_e2e_root_file_drift_and_metadata_preservation(tmp_path: Path):
         "--files", "src/permissions/resolver.ts",
     ]) == 0
 
-    # Bob then drifts and stages root-level Makefile at commit time -> must un-suppress Alice's Makefile claim once!
     (bob / "Makefile").write_text("all:\n\techo bob\n")
     subprocess.run(["git", "-C", str(bob), "add", "Makefile"], check=True, capture_output=True)
     c1 = subprocess.run(["git", "-C", str(bob), "commit", "-m", "fix: also touch makefile"], capture_output=True, text=True)
     assert c1.returncode != 0
     assert "Makefile" in c1.stderr
 
-    # Second commit attempt succeeds (show-once semantics)
     c2 = subprocess.run(["git", "-C", str(bob), "commit", "-m", "fix: also touch makefile"], capture_output=True, text=True)
     assert c2.returncode == 0
 
@@ -170,7 +177,6 @@ def test_e2e_mutated_teammate_claim_resurfaces_at_precommit_once(tmp_path: Path)
         "--files", "src/permissions/resolver.ts",
     ]) == 0
 
-    # Bob mutates his claim on the same branch onto Alice's file
     assert main([
         "claim", "--repo", str(bob),
         "--symptom", "Billing export slow due to permission check",
@@ -215,10 +221,51 @@ def test_e2e_same_user_parallel_worktrees_detect_collision(tmp_path: Path):
     assert c2.returncode == 0
 
 
+def test_e2e_disable_and_enable_repo(tmp_path: Path):
+    from stake.git_refs import read_local_claim_refs
+
+    stake_bin = Path(__file__).resolve().parent.parent / "bin" / "stake"
+    _, alice, bob = _setup_two_devs(tmp_path, stake_bin)
+
+    assert main(["disable", "--repo", str(alice)]) == 0
+    subprocess.run(["git", "-C", str(alice), "checkout", "-b", "fix/disabled-test"], check=True, capture_output=True)
+    assert main([
+        "claim", "--repo", str(alice),
+        "--symptom", "Ignored symptom",
+        "--fix", "Ignored fix",
+        "--files", "src/permissions/resolver.ts",
+    ]) == 0
+    assert read_local_claim_refs(str(alice)) == []
+
+    # Commit in disabled repo also skips writing local claim refs
+    (alice / "src" / "permissions" / "resolver.ts").write_text("export const resolve = () => 'disabled';\n")
+    subprocess.run(["git", "-C", str(alice), "add", "."], check=True, capture_output=True)
+    c_res = subprocess.run(["git", "-C", str(alice), "commit", "-m", "disabled commit"], capture_output=True, text=True)
+    assert c_res.returncode == 0
+    assert read_local_claim_refs(str(alice)) == []
+
+    # Re-enable restores normal claim registration
+    assert main(["enable", "--repo", str(alice)]) == 0
+    assert main([
+        "claim", "--repo", str(alice),
+        "--symptom", "Active symptom",
+        "--fix", "Active fix",
+        "--files", "src/permissions/resolver.ts",
+    ]) == 0
+    assert len(read_local_claim_refs(str(alice))) == 1
+
+
+def test_e2e_init_subcommand_removed():
+    stake_bin = Path(__file__).resolve().parent.parent / "bin" / "stake"
+    res = subprocess.run([str(stake_bin), "init"], capture_output=True, text=True)
+    assert res.returncode != 0
+    assert "invalid choice: 'init'" in res.stderr
+
+
 def test_e2e_version_flag():
     stake_bin = Path(__file__).resolve().parent.parent / "bin" / "stake"
     res = subprocess.run([str(stake_bin), "--version"], capture_output=True, text=True, check=True)
-    assert res.stdout.strip() == "stake 0.2.0"
+    assert res.stdout.strip() == "stake 0.3.0"
 
 
 def load_tests(loader, tests, pattern):

@@ -11,9 +11,7 @@ description: Instructions and operational playbook for AI coding agents (Claude 
 
 ---
 
-## 1. Onboarding a Target Repository
-
-When asked by a user to onboard or set up `stake` on any Git repository `<TARGET_REPO>`:
+## 1. One-Time User-Level Setup
 
 ### Step 1: Ensure `stake` is on `PATH`
 If `stake` is not already installed on your system or environment `PATH`:
@@ -29,22 +27,23 @@ Confirm availability:
 stake --version
 ```
 
-### Step 2: Initialize the Target Repository
-Run `stake init` targeting the repository:
+### Step 2: Run Global User Setup
+Configure `stake` once for your user account:
 
 ```bash
-stake init --repo "<TARGET_REPO>"
+stake setup
 ```
 
-What `stake init` does non-destructively:
-1. **Chains Git Hooks Safely:** Inspects `core.hooksPath` (or `.git/hooks`) and injects an idempotent `# --- stake-hook-start ---` block into `pre-commit` and `pre-push`. Pre-existing hooks (e.g. linters, formatters, Husky) are preserved and chained intact.
-2. **Updates `AGENTS.md` (and `CLAUDE.md` if present):** Inserts an idempotent `<!-- stake:start -->` instruction block instructing all coding harnesses to run `stake claim` at the conclusion of root-cause investigation.
+What `stake setup` configures non-destructively (leaving **zero tracked files modified** inside your repositories):
+1. **Chained Global Git Hooks (`~/.config/stake/hooks`):** Configures `core.hooksPath` in `~/.gitconfig` (and `~/.config/husky/init.sh` for Husky repos) so any existing repo-local `.git/hooks/*` or prior global hooks execute first before running `stake hook pre-commit` / `pre-push`.
+2. **Global Agent Instructions:** Inserts an idempotent `<!-- stake:start -->` block into `~/.claude/CLAUDE.md` and `~/.gemini/GEMINI.md`, and installs the agent skill at `~/.agents/skills/stake/SKILL.md`.
+3. **Repository Filter Configuration (`~/.config/stake/config.json`):** Defaults to `"include": ["*"], "exclude": []` matched against normalized `origin` remote URLs (e.g. `github.com/org/repo`) or local repository paths.
 
-### Step 3: Verify Configuration
+### Step 3: Optional Per-Repo Opt-Out / Opt-In
 ```bash
-stake status --repo "<TARGET_REPO>"
+stake disable --repo "<TARGET_REPO>"
+stake enable --repo "<TARGET_REPO>"
 ```
-Verify that hooks and instructions are reported as active.
 
 ---
 

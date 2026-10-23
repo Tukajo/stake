@@ -1,28 +1,29 @@
 ---
 name: stake
-description: Use when onboarding a repository to the Stake duplicate-work radar or when declaring a root-cause diagnosis and proposed fix before writing code.
+description: Use when declaring a root-cause diagnosis and proposed fix before writing code in any Git repository, or when managing Stake user-level setup and repository filtering.
 ---
 
 # Stake: Serverless Git-Ref Duplicate-Work Radar
 
 See the full [Stake Agent Playbook](../../docs/playbook.md) for comprehensive operational guidelines.
 
-## Onboarding a Target Repository
+## One-Time User-Level Setup
 
-When asked to set up or install `stake` for any Git repository `<REPO_PATH>`:
+When asked to set up or install `stake`:
 
 1. Ensure the `stake` executable is on `PATH` or symlinked to `~/.local/bin/stake`:
    ```bash
    mkdir -p ~/.local/bin
    ln -sf /path/to/stake/bin/stake ~/.local/bin/stake
    ```
-2. Run the non-destructive initializer:
+2. Run the user-level setup (zero tracked files modified in any repository):
    ```bash
-   stake init --repo "<REPO_PATH>"
+   stake setup
    ```
-3. Commit the updated `AGENTS.md` (if tracked in the target repo) and verify with:
+3. Optional repository filtering (`~/.config/stake/config.json`):
    ```bash
-   stake status --repo "<REPO_PATH>"
+   stake disable --repo "<REPO_PATH>"
+   stake enable --repo "<REPO_PATH>"
    ```
 
 ## Using `stake` During Feature / Bugfix Work
