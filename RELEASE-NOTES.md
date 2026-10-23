@@ -6,7 +6,7 @@ Stake v0.2.0 delivers precision improvements across claim receipt tracking, modu
 
 ### Highlights
 
-- **Claim Receipt Fingerprinting & Re-Surfacing:** Suppressed claims now track a content receipt key (combining claim ID, stage, target files, target modules, symptom, and diagnosis). When a teammate modifies their active claim on an existing branch, or local edits drift into new files or modules, the radar automatically invalidates suppression cache entries and alerts once before allowing commit retry.
+- **Claim Receipt Fingerprinting & Re-Surfacing:** Suppressed claims now track a content receipt key (combining claim ID, target files, target modules, symptom, and diagnosis). When a teammate modifies their active claim on an existing branch, or local edits drift into new files or modules, the radar automatically invalidates suppression cache entries and alerts once before allowing commit retry.
 - **Top-Level Container Exclusion:** Common top-level container directories (`src`, `lib`, `packages`, `apps`, `tests`) are no longer treated as root modules, eliminating false-positive overlaps across unrelated features.
 - **Hierarchical Submodule Matching:** Overlap matching now recognizes hierarchical parent/child modules (e.g. `src/permissions` and `src/permissions/loaders`), matching across nested module boundaries.
 - **Same-User Parallel Worktree Detection:** Parallel worktree workflows by the same developer identity across divergent branches (e.g. `development` vs `release/stg`) now detect collision overlaps across worktree checkouts.

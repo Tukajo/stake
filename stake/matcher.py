@@ -26,7 +26,7 @@ _STOPWORDS: frozenset[str] = frozenset({
 _SYNTHETIC_PATTERNS = (
     re.compile(r"^Changes on branch \S+$"),
     re.compile(r"^Branch \S+$"),
-    re.compile(r"^Modifying .+$"),
+    re.compile(r"^Modifying [^\s,]+(?:, [^\s,]+)*$"),
     re.compile(r"^Pushed branch \S+$"),
 )
 

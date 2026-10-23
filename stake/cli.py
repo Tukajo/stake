@@ -104,7 +104,7 @@ def cmd_claim(args: argparse.Namespace) -> int:
     if matches:
         sys.stdout.write("\n" + format_collision_brief(my_claim, matches))
 
-    seen_set = set(state.seen_claims)
+    seen_set = {k for k in state.seen_claims if "@" in k}
     for c in active_claims:
         if c.claim_id != my_claim.claim_id:
             seen_set.add(c.receipt_key())
@@ -177,14 +177,20 @@ def cmd_hook_pre_commit(args: argparse.Namespace) -> int:
         return 0
 
     effective_seen = set(state.seen_claims)
+    drifted_ids: set[str] = set()
     if drifted_modules or drifted_files:
         for c in active_claims:
             if modules_overlap(drifted_modules, c.modules) or drifted_files.intersection(c.files):
+                drifted_ids.add(c.claim_id)
                 effective_seen.discard(c.claim_id)
                 effective_seen.discard(c.receipt_key())
 
     matches = find_overlaps(my_claim, active_claims, seen_claims=sorted(effective_seen))
-    seen_set = set(state.seen_claims) | {m.claim.receipt_key() for m in matches}
+    matched_ids = {m.claim.claim_id for m in matches}
+    seen_set = {k for k in state.seen_claims if "@" in k} | {m.claim.receipt_key() for m in matches}
+    for c in active_claims:
+        if c.claim_id in state.seen_claims and c.claim_id not in matched_ids and c.claim_id not in drifted_ids:
+            seen_set.add(c.receipt_key())
 
     new_state = LocalState(
         claim_id=my_claim.claim_id,

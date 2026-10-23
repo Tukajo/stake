@@ -2,6 +2,7 @@ import sys
 from datetime import datetime, timezone
 from stake.models import ClaimRecord
 from stake.matcher import (
+    _claim_keywords,
     find_overlaps,
     format_active_claims_for_agent,
     format_collision_brief,
@@ -92,6 +93,15 @@ def test_compound_identifiers_and_synthetic_boilerplate_filtering():
         ["src/email/index.ts", "src/email/types.ts"],
     )
     assert find_overlaps(auto1, [auto2]) == []
+
+    # Legitimate manual claim starting with 'Modifying ' still extracts keywords
+    manual = _claim(
+        "alice@example.com", "fix/perm", "development",
+        "",
+        "Modifying permission resolver query in loader",
+        ["src/permissions/resolver.ts"],
+    )
+    assert _claim_keywords(manual) == {"permission", "resolver", "query", "loader"}
 
 
 def test_nested_submodule_overlap_and_shallow_container_isolation():

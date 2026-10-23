@@ -66,7 +66,7 @@ def _resolve_hooks_dir(repo_root: Path, git_common_dir: Path) -> Path:
 def _install_hook_file(hook_path: Path, subcommand: str, stake_bin: str, allow_fail: bool = False) -> None:
     hook_path.parent.mkdir(parents=True, exist_ok=True)
     existing = hook_path.read_text(encoding="utf-8") if hook_path.exists() else "#!/usr/bin/env sh\n"
-    suffix = " || true" if allow_fail else ""
+    suffix = " || true" if allow_fail else " || exit $?"
     block = "\n".join([
         HOOK_START_MARKER,
         f'STAKE_BIN="${{STAKE_BIN:-{stake_bin}}}"',

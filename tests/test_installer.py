@@ -73,14 +73,21 @@ def test_init_repo_inserts_hook_before_trailing_exit_and_stays_idempotent(tmp_pa
     pre_commit.write_text("#!/bin/sh\necho 'custom check'\nexit 0\n")
     pre_commit.chmod(0o755)
 
-    init_repo(str(repo), stake_bin="/usr/local/bin/stake")
+    dummy_stake = tmp_path / "dummy_stake"
+    dummy_stake.write_text("#!/bin/sh\nexit 1\n")
+    dummy_stake.chmod(0o755)
+
+    init_repo(str(repo), stake_bin=str(dummy_stake))
     first = pre_commit.read_text()
-    init_repo(str(repo), stake_bin="/usr/local/bin/stake")
+    init_repo(str(repo), stake_bin=str(dummy_stake))
     second = pre_commit.read_text()
 
     assert first == second
     assert first.count(HOOK_START_MARKER) == 1
     assert first.index("echo 'custom check'") < first.index(HOOK_START_MARKER) < first.rindex("exit 0")
+
+    run_res = subprocess.run([str(pre_commit)], capture_output=True)
+    assert run_res.returncode != 0
 
 
 def test_upsert_fenced_block_handles_exit_variants():
