@@ -8,6 +8,30 @@ It requires **zero servers, zero databases, zero background daemons, and zero th
 
 ---
 
+## Example Interruption In Agentic Flow
+
+![Stake Radar Interruption Example](docs/images/stake_claim_example_interrupt.png)
+
+```output
+========================================================================
+STAKE RADAR: 1 overlapping claim(s) detected (show-once notice)
+========================================================================
+Your work (bob/fix-trends-lag, base: main):
+  Symptom : Dashboard UI stutters when switching timeframes in market trends
+  Fix     : Add useMemo to price data formatting in MarketTrends.tsx
+  Files   : src/components/dashboard/MarketTrends.tsx
+------------------------------------------------------------------------
+* Alice Dev <alice@example.com> on branch 'alice/optimize-trends' (base: main, stage: planned)
+  Symptom : MarketTrends table re-rendering causes lag on price refresh
+  Fix     : Memoize price calculations in MarketTrends.tsx
+  Files   : src/components/dashboard/MarketTrends.tsx
+  Overlap : files=src/components/dashboard/MarketTrends.tsx; modules=src/components/dashboard; keywords=markettrends, price
+------------------------------------------------------------------------
+Bypass: This claim pair is now marked seen. Re-run `git commit` (or set STAKE_SKIP=1) to proceed.
+```
+
+---
+
 ## Agent Playbook
 
 For comprehensive instructions on configuring and operating `stake` across AI coding agents (Claude Code, Cursor, Antigravity, OpenCode, Devin, etc.), see the dedicated operational playbook:
@@ -56,25 +80,3 @@ stake claim \
 - **Zero History Growth:** Every update uses `git commit-tree` with **no `-p` parent**, overwriting the single ~400-byte blob in place.
 - **Automatic Remote Pruning:** Every `stake` fetch deletes expired refs (>4h `planned`, >72h `committed`/`landed`) from `origin` via `git push origin --delete`, and standard `git gc` purges unreachable blobs to 0 bytes.
 - **Hidden from Branch UIs:** Because `refs/stake/*` is outside `refs/heads/*`, claims never clutter `git branch` or Gitea/GitHub branch dropdowns.
-
----
-
-## Example Interruption In Agentic Flow
-
-```output
-========================================================================
-STAKE RADAR: 1 overlapping claim(s) detected (show-once notice)
-========================================================================
-Your work (bob/fix-trends-lag, base: main):
-  Symptom : Dashboard UI stutters when switching timeframes in market trends
-  Fix     : Add useMemo to price data formatting in MarketTrends.tsx
-  Files   : src/components/dashboard/MarketTrends.tsx
-------------------------------------------------------------------------
-* Alice Dev <alice@example.com> on branch 'alice/optimize-trends' (base: main, stage: planned)
-  Symptom : MarketTrends table re-rendering causes lag on price refresh
-  Fix     : Memoize price calculations in MarketTrends.tsx
-  Files   : src/components/dashboard/MarketTrends.tsx
-  Overlap : files=src/components/dashboard/MarketTrends.tsx; modules=src/components/dashboard; keywords=markettrends, price
-------------------------------------------------------------------------
-Bypass: This claim pair is now marked seen. Re-run `git commit` (or set STAKE_SKIP=1) to proceed.
-```
