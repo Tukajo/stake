@@ -2,22 +2,88 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
-from stake.models import ClaimRecord, _normalize_repo_path, derive_modules
+from stake.models import ClaimRecord, _TOP_LEVEL_CONTAINERS, _normalize_repo_path, derive_modules
 
+_CAMEL_RE_1 = re.compile(r"([A-Z]+)([A-Z][a-z])")
+_CAMEL_RE_2 = re.compile(r"([a-z0-9])([A-Z])")
 _WORD_RE = re.compile(r"[a-z0-9_]{4,}")
+_SUB_WORD_RE = re.compile(r"[a-z0-9]{4,}")
+
 _STOPWORDS: frozenset[str] = frozenset({
     "this", "that", "with", "from", "into", "when", "where", "which", "while",
     "have", "will", "should", "could", "would", "make", "made", "only", "also",
     "code", "file", "files", "change", "changes", "update", "updated", "fix",
     "fixed", "fixing", "issue", "issues", "bug", "bugs", "task", "work",
     "branch", "commit", "some", "more", "over", "under", "after", "before",
+    "modifying", "modified", "modify", "pushed", "feat", "feature",
+    "hotfix", "bugfix", "chore", "refactor", "release", "main", "master",
+    "development", "staging", "index", "types", "utils", "common", "helper",
+    "helpers", "test", "tests", "spec",
 })
+
+_SYNTHETIC_PATTERNS = (
+    re.compile(r"^Changes on branch \S+$"),
+    re.compile(r"^Branch \S+$"),
+    re.compile(r"^Modifying .+$"),
+    re.compile(r"^Pushed branch \S+$"),
+)
 
 
 def _extract_keywords(text: str) -> set[str]:
-    tokens = _WORD_RE.findall(text.lower())
-    return {t for t in tokens if t not in _STOPWORDS}
+    if not text:
+        return set()
+    s = _CAMEL_RE_1.sub(r"\1 \2", text)
+    s = _CAMEL_RE_2.sub(r"\1 \2", s).lower()
+    keywords: set[str] = set()
+    for tok in _WORD_RE.findall(s):
+        if tok not in _STOPWORDS:
+            keywords.add(tok)
+        if "_" in tok:
+            for sub in _SUB_WORD_RE.findall(tok):
+                if sub not in _STOPWORDS:
+                    keywords.add(sub)
+    return keywords
+
+
+def _is_synthetic(text: str) -> bool:
+    stripped = text.strip()
+    return any(p.match(stripped) for p in _SYNTHETIC_PATTERNS)
+
+
+def _claim_keywords(claim: ClaimRecord) -> set[str]:
+    parts: list[str] = []
+    if claim.symptom and not _is_synthetic(claim.symptom):
+        parts.append(claim.symptom)
+    if claim.diagnosis_and_fix and not _is_synthetic(claim.diagnosis_and_fix):
+        parts.append(claim.diagnosis_and_fix)
+    if not parts:
+        return set()
+    return _extract_keywords(" ".join(parts))
+
+
+def modules_overlap(
+    mods_a: Iterable[str],
+    mods_b: Iterable[str],
+) -> list[str]:
+    """Return sorted overlapping module paths excluding top-level containers.
+
+    Matches identical or parent/child module paths (m1 == m2 or m1/m2 is a nested
+    child of the other), returning the shared parent module path.
+    """
+    valid_a = {m for m in mods_a if m and m not in _TOP_LEVEL_CONTAINERS}
+    valid_b = {m for m in mods_b if m and m not in _TOP_LEVEL_CONTAINERS}
+    shared: set[str] = set()
+    for m1 in valid_a:
+        for m2 in valid_b:
+            if m1 == m2:
+                shared.add(m1)
+            elif m1.startswith(m2 + "/"):
+                shared.add(m2)
+            elif m2.startswith(m1 + "/"):
+                shared.add(m1)
+    return sorted(shared)
 
 
 @dataclass
@@ -36,23 +102,19 @@ def find_overlaps(
 ) -> list[OverlapMatch]:
     """Return active foreign claims that overlap in files, modules, or fix keywords."""
     seen = set(seen_claims or [])
-    my_email = my_claim.owner_email.strip().lower()
     my_files = set(my_claim.files)
-    my_modules = set(my_claim.modules)
-    my_keywords = _extract_keywords(f"{my_claim.symptom} {my_claim.diagnosis_and_fix}")
+    my_keywords = _claim_keywords(my_claim)
 
     matches: list[OverlapMatch] = []
     for other in all_claims:
-        if other.claim_id == my_claim.claim_id:
+        if other.claim_id == my_claim.claim_id or other.branch == my_claim.branch:
             continue
-        if other.owner_email.strip().lower() == my_email:
-            continue
-        if other.claim_id in seen:
+        if other.claim_id in seen or other.receipt_key() in seen:
             continue
 
         shared_files = sorted(my_files.intersection(other.files))
-        shared_modules = sorted(my_modules.intersection(other.modules))
-        other_keywords = _extract_keywords(f"{other.symptom} {other.diagnosis_and_fix}")
+        shared_modules = modules_overlap(my_claim.modules, other.modules)
+        other_keywords = _claim_keywords(other)
         shared_keywords = sorted(my_keywords.intersection(other_keywords))
 
         if shared_files or shared_modules or len(shared_keywords) >= 2:
@@ -138,17 +200,17 @@ def format_collision_brief(my_claim: ClaimRecord, matches: list[OverlapMatch]) -
 
 def format_active_claims_for_agent(my_claim: ClaimRecord, all_claims: list[ClaimRecord]) -> str:
     """Format active foreign claims for an agent to evaluate during planning."""
-    my_email = my_claim.owner_email.strip().lower()
     my_files = set(my_claim.files)
-    my_modules = set(my_claim.modules)
+    my_keywords = _claim_keywords(my_claim)
     foreign = [
         c for c in all_claims
-        if c.claim_id != my_claim.claim_id and c.owner_email.strip().lower() != my_email
+        if c.claim_id != my_claim.claim_id and c.branch != my_claim.branch
     ]
     foreign.sort(
         key=lambda c: (
             -len(my_files.intersection(c.files)),
-            -len(my_modules.intersection(c.modules)),
+            -len(modules_overlap(my_claim.modules, c.modules)),
+            -len(my_keywords.intersection(_claim_keywords(c))),
             c.claim_id,
         )
     )
