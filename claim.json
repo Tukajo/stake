@@ -1,0 +1,21 @@
+{
+  "base_branch": "main",
+  "branch": "main",
+  "claim_id": "tjfrisch-gmail-com--main",
+  "created_at": "2026-10-23T15:07:39Z",
+  "diagnosis_and_fix": "Update score_candidate and cmd_query to report counts of matched and total files",
+  "expires_at": "2026-10-24T02:10:41Z",
+  "files": [
+    "scripts/poc_semantic_radar.py"
+  ],
+  "last_commit_sha": "6ba6e1d",
+  "modules": [
+    "scripts"
+  ],
+  "owner_email": "tjfrisch@gmail.com",
+  "owner_name": "Timothy Frisch",
+  "stage": "planned",
+  "symptom": "Match card output prints long lists of filenames instead of clean file counts",
+  "ticket": null,
+  "updated_at": "2026-10-23T22:10:41Z"
+}
