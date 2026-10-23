@@ -1,6 +1,7 @@
 """Non-destructive Git hook and AGENTS.md onboarding installer for Stake."""
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -11,6 +12,7 @@ HOOK_START_MARKER: str = "# --- stake-hook-start ---"
 HOOK_END_MARKER: str = "# --- stake-hook-end ---"
 AGENTS_START_MARKER: str = "<!-- stake:start -->"
 AGENTS_END_MARKER: str = "<!-- stake:end -->"
+_TRAILING_EXIT_RE = re.compile(r"(?:^|\r?\n)([ \t]*exit(?:\s+\$?0|\s+\$\?)?[ \t]*)\s*\Z")
 
 
 def _default_stake_bin() -> str:
@@ -31,6 +33,13 @@ def _upsert_fenced_block(existing: str, start_marker: str, end_marker: str, bloc
     before_clean = existing.rstrip("\r\n")
     if not before_clean:
         return block.strip() + "\n"
+    if start_marker == HOOK_START_MARKER:
+        match = _TRAILING_EXIT_RE.search(before_clean)
+        if match:
+            before_exit = before_clean[:match.start()].rstrip("\r\n")
+            exit_line = match.group(1)
+            prefix = f"{before_exit}\n\n" if before_exit else ""
+            return f"{prefix}{block.strip()}\n\n{exit_line}\n"
     return f"{before_clean}\n\n{block.strip()}\n"
 
 
