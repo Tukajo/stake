@@ -4,7 +4,14 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass
-from stake.models import ClaimRecord, _TOP_LEVEL_CONTAINERS, _normalize_repo_path, derive_modules
+from datetime import datetime, timezone
+from stake.models import (
+    ClaimRecord,
+    _TOP_LEVEL_CONTAINERS,
+    _normalize_repo_path,
+    derive_modules,
+    parse_iso_utc,
+)
 
 _CAMEL_RE_1 = re.compile(r"([A-Z]+)([A-Z][a-z])")
 _CAMEL_RE_2 = re.compile(r"([a-z0-9])([A-Z])")
@@ -236,3 +243,67 @@ def format_active_claims_for_agent(my_claim: ClaimRecord, all_claims: list[Claim
         lines.append(f"    fix:     {c.diagnosis_and_fix}")
         lines.append(f"    modules: {', '.join(c.modules) or '(root)'} | files: {', '.join(c.files)}")
     return "\n".join(lines) + "\n"
+
+
+def _format_relative_time(created_at_iso: str | None, now: datetime | None = None) -> str:
+    if not created_at_iso:
+        return "recently"
+    if now is None:
+        now = datetime.now(timezone.utc)
+    try:
+        dt = parse_iso_utc(created_at_iso)
+        seconds = max(0, int((now - dt).total_seconds()))
+    except Exception:
+        return "recently"
+
+    if seconds < 60:
+        return "just now"
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"{minutes}m ago"
+    hours = minutes // 60
+    if hours < 24:
+        return f"{hours}h ago"
+    days = hours // 24
+    return f"{days}d ago"
+
+
+def format_active_claims_summary(
+    claims: list[ClaimRecord],
+    limit: int | None = 10,
+    now: datetime | None = None,
+) -> str:
+    """Format a compact terminal summary of active claims, sorted newest first."""
+    if not claims:
+        return "No active claims found.\n"
+
+    sorted_claims = sorted(claims, key=lambda c: c.created_at or "", reverse=True)
+    total = len(sorted_claims)
+
+    display_claims = sorted_claims if limit is None or limit <= 0 else sorted_claims[:limit]
+
+    lines = [f"Active claims ({total}):"]
+    for c in display_claims:
+        rel_time = _format_relative_time(c.created_at, now=now)
+        ticket_str = f" [{c.ticket}]" if c.ticket else ""
+        header = f"• {c.branch} ({rel_time}) {c.owner_name} <{c.owner_email}>{ticket_str}"
+        lines.append(header)
+
+        summary = c.diagnosis_and_fix or c.symptom or "(no description)"
+        label = "Fix" if c.diagnosis_and_fix else "Symptom"
+        lines.append(f"  {label}: {summary}")
+
+        if c.files:
+            if len(c.files) <= 5:
+                files_str = ", ".join(c.files)
+            else:
+                files_str = f"{', '.join(c.files[:5])} (+{len(c.files) - 5} more)"
+        else:
+            files_str = "(none)"
+        lines.append(f"  Files: {files_str}")
+
+    if limit is not None and limit > 0 and total > limit:
+        lines.append(f"\nShowing {limit} of {total} active claims. Use --all to view all.")
+
+    return "\n".join(lines) + "\n"
+

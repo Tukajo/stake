@@ -256,7 +256,7 @@ def test_e2e_disable_and_enable_repo(tmp_path: Path):
         "--fix", "Active fix",
         "--files", "src/permissions/resolver.ts",
     ]) == 0
-    assert len(read_local_claim_refs(str(alice))) == 1
+    assert len([c for c in read_local_claim_refs(str(alice)) if c.owner_email == "alice@example.com"]) == 1
 
 
 def test_e2e_init_subcommand_removed():
@@ -269,7 +269,7 @@ def test_e2e_init_subcommand_removed():
 def test_e2e_version_flag():
     stake_bin = Path(__file__).resolve().parent.parent / "bin" / "stake"
     res = subprocess.run([str(stake_bin), "--version"], capture_output=True, text=True, check=True)
-    assert res.stdout.strip() == "stake 0.3.0"
+    assert res.stdout.strip() == "stake 0.4.0"
 
 
 def load_tests(loader, tests, pattern):

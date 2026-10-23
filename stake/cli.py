@@ -21,6 +21,7 @@ from stake.git_refs import (
     _run_git,
     delete_local_claim_ref,
     get_repo_identity,
+    is_git_repo,
     load_local_state,
     read_local_claim_refs,
     save_local_state,
@@ -30,11 +31,19 @@ from stake.installer import setup_user
 from stake.matcher import (
     find_overlaps,
     format_active_claims_for_agent,
+    format_active_claims_summary,
     format_collision_brief,
     has_module_drift,
     modules_overlap,
 )
 from stake.models import ClaimRecord, LocalState, derive_modules, make_claim_id
+
+
+def _require_git_repo(repo_path: str) -> bool:
+    if not is_git_repo(repo_path):
+        sys.stderr.write("stake: not a git repository (or any parent directory)\n")
+        return False
+    return True
 
 
 def _parse_files_csv(raw: str | None) -> list[str]:
@@ -71,6 +80,8 @@ def cmd_setup(args: argparse.Namespace) -> int:
 
 
 def cmd_disable(args: argparse.Namespace) -> int:
+    if not _require_git_repo(args.repo):
+        return 1
     repo_id = primary_repo_id(args.repo)
     cfg = load_config()
     if repo_id not in cfg.exclude:
@@ -83,6 +94,8 @@ def cmd_disable(args: argparse.Namespace) -> int:
 
 
 def cmd_enable(args: argparse.Namespace) -> int:
+    if not _require_git_repo(args.repo):
+        return 1
     norm_origin, repo_root = get_repo_identifiers(args.repo)
     repo_id = norm_origin or repo_root
     remove_set = {x.lower() for x in (repo_id, norm_origin, repo_root) if x}
@@ -102,6 +115,8 @@ def cmd_enable(args: argparse.Namespace) -> int:
 
 def cmd_claim(args: argparse.Namespace) -> int:
     repo_path = args.repo
+    if not _require_git_repo(repo_path):
+        return 1
     if not is_repo_allowed(repo_path):
         sys.stdout.write(
             f"Stake: repository '{primary_repo_id(repo_path)}' is disabled in config; skipping claim.\n"
@@ -299,6 +314,8 @@ def cmd_hook_pre_push(args: argparse.Namespace) -> int:
 
 def cmd_status(args: argparse.Namespace) -> int:
     repo_path = args.repo
+    if not _require_git_repo(repo_path):
+        return 1
     active_claims, remote_ok = sync_claims_with_remote(repo_path, push_claim=None)
     if not remote_ok:
         sys.stderr.write("stake: remote unreachable, continuing offline\n")
@@ -321,8 +338,31 @@ def cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_list(args: argparse.Namespace) -> int:
+    repo_path = args.repo
+    if not _require_git_repo(repo_path):
+        return 1
+
+    active_claims, remote_ok = sync_claims_with_remote(repo_path, push_claim=None)
+    if not remote_ok:
+        sys.stderr.write("stake: remote unreachable, continuing offline\n")
+
+    if args.json:
+        sorted_claims = sorted(active_claims, key=lambda c: c.created_at or "", reverse=True)
+        if not args.all and args.limit is not None and args.limit > 0:
+            sorted_claims = sorted_claims[: args.limit]
+        print(json.dumps([c.to_dict() for c in sorted_claims], indent=2, sort_keys=True))
+        return 0
+
+    limit = None if args.all else args.limit
+    sys.stdout.write(format_active_claims_summary(active_claims, limit=limit))
+    return 0
+
+
 def cmd_clear(args: argparse.Namespace) -> int:
     repo_path = args.repo
+    if not _require_git_repo(repo_path):
+        return 1
     owner_email, _, branch, _ = get_repo_identity(repo_path)
     claim_id = make_claim_id(owner_email, branch)
     delete_local_claim_ref(repo_path, claim_id)
@@ -372,6 +412,29 @@ def build_parser() -> argparse.ArgumentParser:
     p_status.add_argument("--json", action="store_true", help="Emit JSON output")
     p_status.add_argument("--repo", default=".", help="Target git repository path")
     p_status.set_defaults(func=cmd_status)
+
+    p_list = sub.add_parser("list", help="List active claims in the repository")
+    p_list.add_argument(
+        "target",
+        nargs="?",
+        default="claims",
+        choices=["claims"],
+        help="Target entity to list (default: claims)",
+    )
+    p_list.add_argument(
+        "--limit",
+        type=int,
+        default=10,
+        help="Maximum number of claims to display (default: 10)",
+    )
+    p_list.add_argument(
+        "--all",
+        action="store_true",
+        help="Display all active claims without truncation",
+    )
+    p_list.add_argument("--json", action="store_true", help="Emit JSON output")
+    p_list.add_argument("--repo", default=".", help="Target git repository path")
+    p_list.set_defaults(func=cmd_list)
 
     p_hook = sub.add_parser("hook", help="Internal git hook entry point")
     p_hook.add_argument("hook_name", choices=["pre-commit", "pre-push"])

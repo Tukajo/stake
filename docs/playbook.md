@@ -45,6 +45,14 @@ stake disable --repo "<TARGET_REPO>"
 stake enable --repo "<TARGET_REPO>"
 ```
 
+### Step 4: Listing Active Claims
+To inspect active claims in any repository (or verify git detection):
+```bash
+stake list
+# Or:
+stake list claims [--limit 10] [--all] [--json]
+```
+
 ---
 
 ## 2. Daily Workflow for Coding Agents

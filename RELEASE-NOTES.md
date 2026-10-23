@@ -1,5 +1,15 @@
 # Stake Release Notes
 
+## v0.4.0 (2026-10-23)
+
+Stake v0.4.0 introduces the `stake list [claims]` command for active claim inspection and adds upfront Git repository detection across CLI operations.
+
+### Highlights
+
+- **Active Claims Listing (`stake list` / `stake list claims`):** Provides a dedicated command to inspect active claims across branches in the current repository, sorted newest first with human-readable relative timestamps.
+- **Smart Truncation & Flags:** Truncates output at a sensible default (10 claims) with a footer notice, and supports `--all` for complete listings, `--limit <n>` for custom display limits, and `--json` for machine-readable JSON output.
+- **Upfront Git Repository Detection:** All repository-dependent commands (`list`, `status`, `claim`, `clear`, `enable`, `disable`) cleanly verify if the target directory is inside a Git repository before invoking Git plumbing, exiting with code 1 and clean error messages without Python stack traces.
+
 ## v0.3.0 (2026-10-23)
 
 Stake v0.3.0 moves from per-repository initialization (`stake init`) to a zero-footprint, user-level installation (`stake setup`) with global hook chaining and configurable repository filtering.

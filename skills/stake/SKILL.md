@@ -40,3 +40,10 @@ When asked to set up or install `stake`:
    Inspect the active teammate claims printed by `stake claim`. If another developer's claim solves the same underlying root cause or modifies the same/adjacent files in the same module (including across `release/stg` vs. `development`), show the user a concise side-by-side comparison.
 3. **Show-Once Bypass:**
    If the user wants to proceed anyway (or if `pre-commit` surfaces a new overlap once), simply continue or re-run `git commit` (`stake` records seen claims in `.git/stake-state.json` and never blocks twice).
+4. **Inspect Active Claims:**
+   List all active claims in the current repository (auto-detects git repo):
+   ```bash
+   stake list
+   # Or explicitly:
+   stake list claims [--limit N] [--all] [--json]
+   ```

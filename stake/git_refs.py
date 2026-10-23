@@ -48,6 +48,15 @@ def _run_git(
     )
 
 
+def is_git_repo(repo_path: str = ".") -> bool:
+    """Return True if repo_path is inside a Git repository work tree or bare git dir."""
+    try:
+        res = _run_git(str(Path(repo_path).resolve()), ["rev-parse", "--git-dir"], check=False)
+        return res.returncode == 0
+    except (subprocess.SubprocessError, OSError):
+        return False
+
+
 def get_git_dirs(repo_path: str = ".") -> tuple[Path, Path, Path]:
     """Return resolved (repo_root, git_dir, git_common_dir) supporting linked worktrees."""
     base = Path(repo_path).resolve()
